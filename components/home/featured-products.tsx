@@ -1,11 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/products/product-card";
 import { useStore } from "@/lib/store";
+import { pickFeaturedProducts } from "@/lib/home-products";
 
 interface FeaturedProductsProps {
   title: string;
@@ -13,17 +15,16 @@ interface FeaturedProductsProps {
 }
 
 export function FeaturedProducts({ title, filter = "all" }: FeaturedProductsProps) {
-  const { products } = useStore();
+  const { products, productsLoading, productsError } = useStore();
 
-  const filteredProducts = products.filter((product) => {
-    if (filter === "new") return product.isNew;
-    if (filter === "bestseller") return product.isBestSeller;
-    return true;
-  }).slice(0, 4);
+  const filteredProducts = useMemo(
+    () => pickFeaturedProducts(products, filter, 4),
+    [products, filter]
+  );
 
   return (
     <section className="py-16 bg-muted/30">
-      <div className="container mx-auto px-4">
+      <motion.div className="container mx-auto px-4">
         <div className="flex items-center justify-between mb-10">
           <motion.h2
             initial={{ opacity: 0, x: -20 }}
@@ -47,12 +48,31 @@ export function FeaturedProducts({ title, filter = "all" }: FeaturedProductsProp
           </motion.div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      </div>
+        {productsError && (
+          <p className="mb-4 text-sm text-destructive">{productsError}</p>
+        )}
+
+        {productsLoading ? (
+          <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="aspect-square rounded-xl bg-muted animate-pulse"
+              />
+            ))}
+          </motion.div>
+        ) : filteredProducts.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">
+            ຍັງບໍ່ມີສິນຄ້າ — ເພີ່ມສິນຄ້າທີ່ແອັດມິນ ຫຼື ກວດ API
+          </p>
+        ) : (
+          <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {filteredProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </motion.div>
+        )}
+      </motion.div>
     </section>
   );
 }

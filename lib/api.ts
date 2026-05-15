@@ -12,6 +12,8 @@ import type {
   ApiUpdateExchangeRateResponse,
   ApiOrder,
   ApiOrderListResponse,
+  ApiShippingConfig,
+  ApiShippingQuote,
   ApiProduct,
   ApiProductListResponse,
   ApiUpdateCategoryBody,
@@ -83,9 +85,44 @@ function createAdminClient(): AxiosInstance {
   return instance;
 }
 
+/** Admin JWT first, then customer JWT (GET /orders may accept either) */
+function createOrdersClient(): AxiosInstance {
+  const instance = createPublicClient();
+  instance.interceptors.request.use((config) => {
+    const token = getStoredAdminAccessToken() ?? getStoredAccessToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  });
+  return instance;
+}
+
+function unwrapOrderList(payload: unknown): ApiOrder[] {
+  if (Array.isArray(payload)) return payload as ApiOrder[];
+  if (!payload || typeof payload !== "object") return [];
+  const record = payload as Record<string, unknown>;
+  if (Array.isArray(record.items)) return record.items as ApiOrder[];
+  if (Array.isArray(record.orders)) return record.orders as ApiOrder[];
+  if (record.data != null) return unwrapOrderList(record.data);
+  return [];
+}
+
+async function fetchOrdersWithToken(
+  token: string,
+  params: { limit: number; offset: number }
+): Promise<ApiOrder[]> {
+  const { data } = await publicClient.get<unknown>("/orders", {
+    params,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return unwrapOrderList(data);
+}
+
 const publicClient = createPublicClient();
 const userClient = createUserClient();
 const adminClient = createAdminClient();
+const ordersClient = createOrdersClient();
 
 export async function apiHealth(): Promise<{ status?: string }> {
   const { data } = await publicClient.get<{ status?: string }>("/health");
@@ -215,19 +252,67 @@ export async function apiDeleteCategory(id: number): Promise<void> {
   await adminClient.delete(`/categories/${id}`);
 }
 
+/** Public — GET /orders/shipping-config */
+export async function apiGetShippingConfig(): Promise<ApiShippingConfig> {
+  const { data } = await publicClient.get<ApiShippingConfig>(
+    "/orders/shipping-config"
+  );
+  return data;
+}
+
+/** Public — GET /orders/shipping-quote?subtotal_lak= */
+export async function apiGetShippingQuote(
+  subtotalLak: number
+): Promise<ApiShippingQuote> {
+  const { data } = await publicClient.get<ApiShippingQuote>(
+    "/orders/shipping-quote",
+    { params: { subtotal_lak: Math.round(subtotalLak) } }
+  );
+  return data;
+}
+
+/** Bearer JWT (admin or customer) — GET /orders */
 export async function apiListOrders(params?: {
   limit?: number;
   offset?: number;
 }): Promise<ApiOrder[]> {
-  const { data } = await adminClient.get<ApiOrderListResponse | ApiOrder[]>(
-    "/orders",
-    { params }
-  );
-  if (Array.isArray(data)) return data;
-  return data.items ?? [];
+  const query = {
+    limit: params?.limit ?? 50,
+    offset: params?.offset ?? 0,
+  };
+  const adminTok = getStoredAdminAccessToken();
+  const userTok = getStoredAccessToken();
+
+  if (!adminTok && !userTok) {
+    throw new Error("missing bearer token");
+  }
+
+  const tokens = [...new Set([adminTok, userTok].filter(Boolean))] as string[];
+
+  let lastError: unknown;
+  let lastResult: ApiOrder[] = [];
+
+  for (const token of tokens) {
+    try {
+      const list = await fetchOrdersWithToken(token, query);
+      if (list.length > 0) return list;
+      lastResult = list;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (lastResult.length === 0 && lastError) throw lastError;
+  return lastResult;
 }
 
-/** Customer order — uses client JWT */
+/** Bearer JWT (admin or customer) — GET /orders/:id */
+export async function apiGetOrder(id: number | string): Promise<ApiOrder> {
+  const { data } = await ordersClient.get<ApiOrder>(`/orders/${id}`);
+  return data;
+}
+
+/** Customer JWT — POST /orders */
 export async function apiCreateOrder(
   body: ApiCreateOrderBody
 ): Promise<ApiOrder> {

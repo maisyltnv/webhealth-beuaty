@@ -1,45 +1,39 @@
 "use client";
 
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-
-const categories = [
-  {
-    name: "ອາຫານເສີມ",
-    nameEn: "supplements",
-    description: "ຄໍລາເຈນ, ວິຕາມິນ, ກູຕາໄທໂອນ",
-    image: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&h=300&fit=crop",
-    productCount: 45,
-  },
-  {
-    name: "ດູແລຜິວໜັງ",
-    nameEn: "skincare",
-    description: "ເຊລັ່ມ, ຄຣີມບຳລຸງ, ແຜ່ນມາສ",
-    image: "https://images.unsplash.com/photo-1570194065650-d99fb4b38b15?w=400&h=300&fit=crop",
-    productCount: 62,
-  },
-  {
-    name: "ວິຕາມິນ",
-    nameEn: "vitamins",
-    description: "ວິຕາມິນລວມ, ນ້ຳມັນປາ, ແຄລຊຽມ",
-    image: "https://images.unsplash.com/photo-1550572017-edd951aa8f72?w=400&h=300&fit=crop",
-    productCount: 38,
-  },
-  {
-    name: "ຄວາມງາມ",
-    nameEn: "beauty",
-    description: "ເຄື່ອງສຳອາງ, ດູແລຜົມ, ນ້ຳຫອມ",
-    image: "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?w=400&h=300&fit=crop",
-    productCount: 29,
-  },
-];
+import { useStore } from "@/lib/store";
+import { ProductImage } from "@/components/products/product-image";
+import { PRODUCT_PLACEHOLDER_IMAGE } from "@/lib/product-image";
 
 export function CategoriesSection() {
+  const { categories, categoriesLoading, categoriesError, products } = useStore();
+
+  const displayCategories = useMemo(() => {
+    return categories.map((cat) => {
+      const slug = cat.slug?.trim() || `category-${cat.id}`;
+      const inCategory = products.filter((p) => p.category === slug);
+      const cover =
+        inCategory.find((p) => p.images[0] && p.images[0] !== PRODUCT_PLACEHOLDER_IMAGE)
+          ?.images[0] ?? PRODUCT_PLACEHOLDER_IMAGE;
+
+      return {
+        id: cat.id,
+        name: cat.name,
+        slug,
+        description: cat.description?.trim() || cat.name,
+        image: cover,
+        productCount: inCategory.length,
+      };
+    });
+  }, [categories, products]);
+
   return (
     <section className="py-16">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-12">
+        <motion.div className="text-center mb-12">
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -57,43 +51,65 @@ export function CategoriesSection() {
           >
             ເລືອກຊື້ຜະລິດຕະພັນດ້ານສຸຂະພາບ ແລະ ຄວາມງາມທີ່ຫຼາກຫຼາຍ ນຳເຂົ້າໂດຍກົງຈາກຕ່າງປະເທດ
           </motion.p>
-        </div>
+        </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {categories.map((category, index) => (
-            <motion.div
-              key={category.nameEn}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <Link href={`/category/${category.nameEn}`}>
-                <div className="group relative h-72 rounded-xl overflow-hidden">
-                  <img
-                    src={category.image}
-                    alt={category.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    crossOrigin="anonymous"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-primary/90 via-primary/40 to-transparent" />
-                  <div className="absolute inset-0 flex flex-col justify-end p-6 text-primary-foreground">
-                    <h3 className="text-xl font-bold mb-1">{category.name}</h3>
-                    <p className="text-sm text-primary-foreground/80 mb-3">
-                      {category.description}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">{category.productCount} ສິນຄ້າ</span>
-                      <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center group-hover:translate-x-1 transition-transform">
-                        <ArrowRight className="h-4 w-4 text-secondary-foreground" />
+        {categoriesError && (
+          <p className="mb-6 text-center text-sm text-destructive">
+            {categoriesError}
+          </p>
+        )}
+
+        {categoriesLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <motion.div
+                key={i}
+                className="h-72 rounded-xl bg-muted animate-pulse"
+              />
+            ))}
+          </div>
+        ) : displayCategories.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">
+            ຍັງບໍ່ມີໝວດໝູ່ — ສ້າງທີ່ແອັດມິນ /admin/categories
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {displayCategories.map((category, index) => (
+              <motion.div
+                key={category.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <Link href={`/products?category=${encodeURIComponent(category.slug)}`}>
+                  <div className="group relative h-72 rounded-xl overflow-hidden">
+                    <ProductImage
+                      src={category.image}
+                      alt={category.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-primary/90 via-primary/40 to-transparent" />
+                    <div className="absolute inset-0 flex flex-col justify-end p-6 text-primary-foreground">
+                      <h3 className="text-xl font-bold mb-1">{category.name}</h3>
+                      <p className="text-sm text-primary-foreground/80 mb-3 line-clamp-2">
+                        {category.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">
+                          {category.productCount} ສິນຄ້າ
+                        </span>
+                        <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center group-hover:translate-x-1 transition-transform">
+                          <ArrowRight className="h-4 w-4 text-secondary-foreground" />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

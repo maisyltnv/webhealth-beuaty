@@ -8,63 +8,23 @@ import {
   ShoppingCart,
   Menu,
   X,
-  ChevronDown,
   User,
   Heart,
   Sparkles,
   Pill,
-  Droplets,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useStore } from "@/lib/store";
 import { formatLAK } from "@/lib/format";
 
-const categories = [
-  {
-    name: "ອາຫານເສີມ",
-    nameEn: "Supplements",
-    icon: Pill,
-    subcategories: [
-      "ຄໍລາເຈນ",
-      "ວິຕາມິນ",
-      "ກູຕາໄທໂອນ",
-      "ນ້ຳມັນປາ",
-      "ໂປຣໄບໂອຕິກ",
-    ],
-  },
-  {
-    name: "ດູແລຜິວໜັງ",
-    nameEn: "Skincare",
-    icon: Droplets,
-    subcategories: [
-      "ເຊລັ່ມ",
-      "ຄຣີມບຳລຸງ",
-      "ແຜ່ນມາສ",
-      "ໂທນເນີ",
-      "ຄຣີມກັນແດດ",
-    ],
-  },
-  {
-    name: "ຄວາມງາມ",
-    nameEn: "Beauty",
-    icon: Sparkles,
-    subcategories: [
-      "ເຄື່ອງສຳອາງ",
-      "ດູແລຜົມ",
-      "ນ້ຳຫອມ",
-      "ເຄື່ອງປະທິນໂສມ",
-    ],
-  },
-];
-
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { cart, cartTotal, cartCount, removeFromCart, updateQuantity } = useStore();
+  const { cart, cartTotal, cartCount, removeFromCart, updateQuantity, categories } =
+    useStore();
 
   return (
     <>
@@ -98,44 +58,20 @@ export function Header() {
 
             {/* Desktop Navigation */}
             <nav className="hidden lg:flex items-center gap-1">
-              {categories.map((category) => (
-                <div
-                  key={category.name}
-                  className="relative"
-                  onMouseEnter={() => setActiveCategory(category.name)}
-                  onMouseLeave={() => setActiveCategory(null)}
-                >
-                  <button className="flex items-center gap-1 px-4 py-2 text-foreground hover:text-primary transition-colors">
-                    <category.icon className="h-4 w-4" />
+              {categories.map((category) => {
+                const slug =
+                  category.slug?.trim() || `category-${category.id}`;
+                return (
+                  <Link
+                    key={category.id}
+                    href={`/products?category=${encodeURIComponent(slug)}`}
+                    className="flex items-center gap-1 px-4 py-2 text-foreground hover:text-primary transition-colors"
+                  >
+                    <Pill className="h-4 w-4 shrink-0 opacity-70" />
                     {category.name}
-                    <ChevronDown className="h-4 w-4" />
-                  </button>
-
-                  <AnimatePresence>
-                    {activeCategory === category.name && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full left-0 w-56 bg-card border border-border rounded-lg shadow-lg p-4"
-                      >
-                        <ul className="space-y-2">
-                          {category.subcategories.map((sub) => (
-                            <li key={sub}>
-                              <Link
-                                href={`/category/${category.nameEn.toLowerCase()}`}
-                                className="block py-1.5 px-3 rounded-md hover:bg-accent text-foreground hover:text-primary transition-colors"
-                              >
-                                {sub}
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              ))}
+                  </Link>
+                );
+              })}
               <Link
                 href="/products"
                 className="px-4 py-2 text-foreground hover:text-primary transition-colors"
@@ -226,30 +162,21 @@ export function Header() {
                 </div>
 
                 <nav className="space-y-2">
-                  {categories.map((category) => (
-                    <div key={category.name} className="border-b border-border pb-2">
-                      <button className="flex items-center justify-between w-full py-2 font-medium">
-                        <span className="flex items-center gap-2">
-                          <category.icon className="h-4 w-4 text-primary" />
-                          {category.name}
-                        </span>
-                        <ChevronDown className="h-4 w-4" />
-                      </button>
-                      <ul className="ml-6 space-y-1 mt-1">
-                        {category.subcategories.map((sub) => (
-                          <li key={sub}>
-                            <Link
-                              href={`/category/${category.nameEn.toLowerCase()}`}
-                              className="block py-1 text-muted-foreground hover:text-primary"
-                              onClick={() => setIsMenuOpen(false)}
-                            >
-                              {sub}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
+                  {categories.map((category) => {
+                    const slug =
+                      category.slug?.trim() || `category-${category.id}`;
+                    return (
+                      <Link
+                        key={category.id}
+                        href={`/products?category=${encodeURIComponent(slug)}`}
+                        className="flex items-center gap-2 py-2 font-medium border-b border-border"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        <Pill className="h-4 w-4 text-primary" />
+                        {category.name}
+                      </Link>
+                    );
+                  })}
                   <Link
                     href="/products"
                     className="block py-2 font-medium"

@@ -8,8 +8,10 @@ import {
   useCallback,
   useEffect,
 } from "react";
+import type { ApiCategory } from "@/lib/api-types";
 import {
   apiGetExchangeRate,
+  apiListCategories,
   apiListProducts,
   isApiConfigured,
 } from "@/lib/api";
@@ -34,6 +36,7 @@ export interface Product {
   trustBadges: string[];
   isNew: boolean;
   isBestSeller: boolean;
+  createdAt?: string;
 }
 
 export interface CartItem {
@@ -43,6 +46,8 @@ export interface CartItem {
 
 export interface Order {
   id: string;
+  /** Numeric id from API (for detail / status updates later) */
+  apiId?: number;
   items: CartItem[];
   customerInfo: {
     name: string;
@@ -52,6 +57,8 @@ export interface Order {
   };
   paymentMethod: string;
   status: "pending" | "processing" | "shipped" | "delivered";
+  subtotalLAK?: number;
+  shippingFeeLAK?: number;
   totalLAK: number;
   createdAt: Date;
 }
@@ -77,6 +84,12 @@ interface StoreContextType {
   productsError: string | null;
   setProducts: (products: Product[]) => void;
   refreshProducts: () => Promise<void>;
+
+  // Categories (public API)
+  categories: ApiCategory[];
+  categoriesLoading: boolean;
+  categoriesError: string | null;
+  refreshCategories: () => Promise<void>;
   
   // Orders
   orders: Order[];
@@ -231,6 +244,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
 
   const refreshExchangeRate = useCallback(async () => {
@@ -245,6 +261,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       /* keep current rate */
+    }
+  }, []);
+
+  const refreshCategories = useCallback(async () => {
+    if (!isApiConfigured()) {
+      setCategories([]);
+      setCategoriesError(null);
+      setCategoriesLoading(false);
+      return;
+    }
+
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    try {
+      let list = await apiListCategories({ roots_only: true });
+      if (list.length === 0) {
+        list = await apiListCategories();
+      }
+      setCategories(list.filter((c) => c.is_active !== false));
+    } catch {
+      setCategories([]);
+      setCategoriesError("ໂຫຼດໝວດໝູ່ບໍ່ສຳເລັດ");
+    } finally {
+      setCategoriesLoading(false);
     }
   }, []);
 
@@ -283,8 +323,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshExchangeRate();
+    void refreshCategories();
     void refreshProducts();
-  }, [refreshExchangeRate, refreshProducts]);
+  }, [refreshExchangeRate, refreshCategories, refreshProducts]);
 
   const addToCart = useCallback((product: Product, quantity = 1) => {
     setCart((prev) => {
@@ -363,6 +404,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         productsError,
         setProducts,
         refreshProducts,
+        categories,
+        categoriesLoading,
+        categoriesError,
+        refreshCategories,
         orders,
         setOrders,
         addOrder,

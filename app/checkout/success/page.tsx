@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { CheckCircle, Package, Phone, ArrowRight } from "lucide-react";
+import { CheckCircle, Phone, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import confetti from "canvas-confetti";
 
-export default function CheckoutSuccessPage() {
+function CheckoutSuccessContent() {
   const router = useRouter();
-  const [orderNumber] = useState(`ORD-${Date.now().toString().slice(-8)}`);
+  const searchParams = useSearchParams();
+  const orderNumber =
+    searchParams.get("order")?.trim() ||
+    (typeof window !== "undefined"
+      ? sessionStorage.getItem("checkoutOrderNumber")
+      : null) ||
+    "—";
 
   useEffect(() => {
-    // Fire confetti
     confetti({
       particleCount: 100,
       spread: 70,
@@ -28,7 +33,6 @@ export default function CheckoutSuccessPage() {
         animate={{ opacity: 1, scale: 1 }}
         className="max-w-md w-full text-center"
       >
-        {/* Success Icon */}
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -45,59 +49,24 @@ export default function CheckoutSuccessPage() {
           ຂອບໃຈທີ່ຊື້ສິນຄ້າກັບພວກເຮົາ
         </p>
 
-        {/* Order Number */}
         <div className="bg-muted/50 rounded-xl p-4 mb-6">
           <p className="text-sm text-muted-foreground mb-1">ເລກທີ່ຄຳສັ່ງຊື້</p>
           <p className="text-xl font-bold text-primary">{orderNumber}</p>
         </div>
 
-        {/* What's Next */}
-        <div className="bg-card border border-border rounded-xl p-6 mb-6 text-left">
+        <motion.div className="bg-card border border-border rounded-xl p-6 mb-6 text-left">
           <h3 className="font-semibold mb-4">ຂັ້ນຕອນຕໍ່ໄປ</h3>
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                <span className="text-sm font-bold text-primary">1</span>
-              </div>
-              <div>
-                <p className="font-medium">ຢືນຢັນຄຳສັ່ງຊື້</p>
-                <p className="text-sm text-muted-foreground">
-                  ພວກເຮົາຈະຕິດຕໍ່ຫາທ່ານພາຍໃນ 24 ຊົ່ວໂມງ
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                <span className="text-sm font-bold text-primary">2</span>
-              </div>
-              <div>
-                <p className="font-medium">ກະກຽມສິນຄ້າ</p>
-                <p className="text-sm text-muted-foreground">
-                  ສິນຄ້າຈະຖືກກະກຽມພາຍໃນ 1-2 ວັນ
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                <span className="text-sm font-bold text-primary">3</span>
-              </div>
-              <div>
-                <p className="font-medium">ຈັດສົ່ງສິນຄ້າ</p>
-                <p className="text-sm text-muted-foreground">
-                  ສິນຄ້າຈະຖືກສົ່ງເຖິງທ່ານພາຍໃນ 3-5 ວັນ
-                </p>
-              </div>
-            </div>
+          <div className="space-y-4 text-sm text-muted-foreground">
+            <p>1. ພວກເຮົາຈະຕິດຕໍ່ຫາທ່ານພາຍໃນ 24 ຊົ່ວໂມງ</p>
+            <p>2. ກະກຽມ ແລະ ຈັດສົ່ງສິນຄ້າພາຍໃນ 3–5 ວັນ</p>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Contact */}
         <div className="flex items-center justify-center gap-2 text-muted-foreground mb-8">
           <Phone className="h-4 w-4" />
           <span className="text-sm">ມີຄຳຖາມ? ໂທຫາ 020 5555 1234</span>
         </div>
 
-        {/* Actions */}
         <div className="flex flex-col gap-3">
           <Button onClick={() => router.push("/products")} className="w-full">
             ສືບຕໍ່ຊື້ເຄື່ອງ
@@ -113,5 +82,19 @@ export default function CheckoutSuccessPage() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense
+      fallback={
+        <motion.div className="min-h-screen flex items-center justify-center">
+          ກຳລັງໂຫຼດ...
+        </motion.div>
+      }
+    >
+      <CheckoutSuccessContent />
+    </Suspense>
   );
 }

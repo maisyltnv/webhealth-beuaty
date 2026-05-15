@@ -78,16 +78,66 @@ export interface ApiUpdateProductBody {
   source_url?: string;
 }
 
-export interface ApiCreateOrderBody {
+/** GET /orders/shipping-config */
+export interface ApiShippingConfig {
+  shipping_fee_lak: number;
+  free_shipping_min_subtotal_lak: number;
+}
+
+/** GET /orders/shipping-quote */
+export interface ApiShippingQuote {
+  subtotal_lak: number;
+  shipping_fee_lak: number;
   total_amount_lak: number;
-  payment_receipt_url: string;
+  free_shipping_min_subtotal_lak: number;
+  amount_until_free_shipping_lak: number;
+  free_shipping_applied: boolean;
+}
+
+export interface ApiOrderItemInput {
+  product_id: number;
+  quantity: number;
+}
+
+export interface ApiOrderShippingInput {
+  recipient_name: string;
+  phone: string;
+  province: string;
+  address_detail: string;
+}
+
+/** POST /orders — customer JWT */
+export interface ApiCreateOrderBody {
+  items: ApiOrderItemInput[];
+  shipping: ApiOrderShippingInput;
+  payment_method: "bcel_qr" | "cod";
+  payment_receipt_url?: string;
+}
+
+export interface ApiOrderItem {
+  id?: number;
+  product_id?: number;
+  quantity?: number;
+  unit_price_lak?: number;
+  line_total_lak?: number;
+  product_name?: string;
+  [key: string]: unknown;
 }
 
 export interface ApiOrder {
-  id: number | string;
+  id: number;
+  order_number?: string;
+  subtotal_lak?: number;
+  shipping_fee_lak?: number;
   total_amount_lak?: number;
+  payment_method?: string;
   payment_receipt_url?: string | null;
+  recipient_name?: string;
+  phone?: string;
+  province?: string;
+  address_detail?: string;
   status?: string;
+  items?: ApiOrderItem[];
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;

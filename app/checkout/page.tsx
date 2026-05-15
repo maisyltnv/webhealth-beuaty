@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,7 +20,14 @@ import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
 import { formatLAK } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
-import { apiCreateOrder } from "@/lib/api";
+import {
+  apiCreateOrder,
+  apiGetShippingConfig,
+  apiGetShippingQuote,
+  isApiConfigured,
+} from "@/lib/api";
+import type { ApiShippingQuote } from "@/lib/api-types";
+import { ProductImage } from "@/components/products/product-image";
 
 const steps = [
   { id: 1, nameLao: "ທີ່ຢູ່ຈັດສົ່ງ", icon: Truck },
@@ -63,10 +70,70 @@ export default function CheckoutPage() {
     province: "",
   });
 
-  const [paymentMethod, setPaymentMethod] = useState("bcel");
+  const [paymentMethod, setPaymentMethod] = useState<"bcel" | "cod">("bcel");
+  const [freeShippingMin, setFreeShippingMin] = useState(500_000);
+  const [defaultShippingFee, setDefaultShippingFee] = useState(30_000);
+  const [shippingQuote, setShippingQuote] = useState<ApiShippingQuote | null>(
+    null
+  );
+  const [quoteLoading, setQuoteLoading] = useState(false);
 
-  const shippingFee = cartTotal >= 500000 ? 0 : 30000;
-  const totalAmount = cartTotal + shippingFee;
+  useEffect(() => {
+    if (!isApiConfigured() || cart.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const config = await apiGetShippingConfig();
+        if (cancelled) return;
+        setFreeShippingMin(config.free_shipping_min_subtotal_lak);
+        setDefaultShippingFee(config.shipping_fee_lak);
+      } catch {
+        /* keep defaults */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cart.length]);
+
+  useEffect(() => {
+    if (!isApiConfigured() || cartTotal <= 0) {
+      setShippingQuote(null);
+      return;
+    }
+    let cancelled = false;
+    setQuoteLoading(true);
+    (async () => {
+      try {
+        const quote = await apiGetShippingQuote(Math.round(cartTotal));
+        if (!cancelled) setShippingQuote(quote);
+      } catch {
+        if (!cancelled) setShippingQuote(null);
+      } finally {
+        if (!cancelled) setQuoteLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cartTotal]);
+
+  const shippingFee = useMemo(() => {
+    if (shippingQuote) return shippingQuote.shipping_fee_lak;
+    return cartTotal >= freeShippingMin ? 0 : defaultShippingFee;
+  }, [shippingQuote, cartTotal, freeShippingMin, defaultShippingFee]);
+
+  const totalAmount = useMemo(() => {
+    if (shippingQuote) return shippingQuote.total_amount_lak;
+    return cartTotal + shippingFee;
+  }, [shippingQuote, cartTotal, shippingFee]);
+
+  const amountUntilFree = useMemo(() => {
+    if (shippingQuote?.amount_until_free_shipping_lak != null) {
+      return shippingQuote.amount_until_free_shipping_lak;
+    }
+    return Math.max(0, freeShippingMin - cartTotal);
+  }, [shippingQuote, freeShippingMin, cartTotal]);
 
   const handleShippingSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,36 +148,71 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
     setOrderError(null);
 
-    let serverId: string | undefined;
-    if (token) {
+    if (isApiConfigured() && !token) {
+      setOrderError("ຕ້ອງເຂົ້າລະບົບລູກຄ້າກ່ອນຢືນຢັນຄຳສັ່ງ (POST /orders ຕ້ອງໃຊ້ JWT)");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const orderItems = cart
+      .map((item) => ({
+        product_id: parseInt(item.product.id, 10),
+        quantity: item.quantity,
+      }))
+      .filter((i) => !Number.isNaN(i.product_id) && i.quantity > 0);
+
+    if (isApiConfigured() && orderItems.length === 0) {
+      setOrderError(
+        "ສິນຄ້າໃນກະຕ່າບໍ່ຖືກຕ້ອງ — ກະລຸນາເລືອກສິນຄ້າຈາກໜ້າຮ້ານ (ຕ້ອງມີ product_id ຈາກ API)"
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
+    let orderNumber: string | undefined;
+
+    if (token && isApiConfigured()) {
       try {
-        const receipt =
-          paymentMethod === "bcel"
-            ? "pending-receipt-upload"
-            : "";
         const created = await apiCreateOrder({
-          total_amount_lak: Math.round(totalAmount),
-          payment_receipt_url: receipt,
+          items: orderItems,
+          shipping: {
+            recipient_name: shippingInfo.name.trim(),
+            phone: shippingInfo.phone.trim(),
+            province: shippingInfo.province,
+            address_detail: shippingInfo.address.trim(),
+          },
+          payment_method: paymentMethod === "bcel" ? "bcel_qr" : "cod",
+          payment_receipt_url: "",
         });
-        serverId = created?.id != null ? String(created.id) : undefined;
+        orderNumber =
+          created.order_number?.trim() ||
+          (created.id != null ? `ORD-${String(created.id).padStart(8, "0")}` : undefined);
       } catch {
         setOrderError(
-          "ບັນທຶກຄຳສັ່ງຜ່ານ API ບໍ່ສຳເລັດ (ກວດ JWT ແລະ backend). ຍັງບັນທຶກໃນແອັບຕໍ່ໄປ."
+          "ບັນທຶກຄຳສັ່ງຜ່ານ API ບໍ່ສຳເລັດ — ກວດ JWT, ສິນຄ້າ ແລະ backend"
         );
+        setIsSubmitting(false);
+        return;
       }
     }
 
     addOrder({
       items: cart,
       customerInfo: shippingInfo,
-      paymentMethod,
+      paymentMethod: paymentMethod === "bcel" ? "bcel_qr" : "cod",
       status: "pending",
       totalLAK: totalAmount,
-      ...(serverId ? { id: serverId } : {}),
+      ...(orderNumber ? { id: orderNumber } : {}),
     });
 
     clearCart();
-    router.push("/checkout/success");
+    if (orderNumber && typeof window !== "undefined") {
+      sessionStorage.setItem("checkoutOrderNumber", orderNumber);
+    }
+    const successUrl = orderNumber
+      ? `/checkout/success?order=${encodeURIComponent(orderNumber)}`
+      : "/checkout/success";
+    router.push(successUrl);
     setIsSubmitting(false);
   };
 
@@ -433,11 +535,10 @@ export default function CheckoutPage() {
                           key={item.product.id}
                           className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg"
                         >
-                          <img
+                          <ProductImage
                             src={item.product.images[0]}
                             alt={item.product.nameLao}
                             className="w-16 h-16 object-cover rounded-md"
-                            crossOrigin="anonymous"
                           />
                           <div className="flex-1">
                             <p className="font-medium text-sm">
@@ -486,11 +587,10 @@ export default function CheckoutPage() {
                 {cart.map((item) => (
                   <div key={item.product.id} className="flex items-center gap-3">
                     <div className="relative">
-                      <img
+                      <ProductImage
                         src={item.product.images[0]}
                         alt={item.product.nameLao}
                         className="w-12 h-12 object-cover rounded-md"
-                        crossOrigin="anonymous"
                       />
                       <span className="absolute -top-2 -right-2 w-5 h-5 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
                         {item.quantity}
@@ -529,9 +629,16 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {cartTotal < 500000 && (
+              {amountUntilFree > 0 && !shippingQuote?.free_shipping_applied && (
                 <p className="text-xs text-muted-foreground mt-4 text-center">
-                  ຊື້ເພີ່ມອີກ {formatLAK(500000 - cartTotal)} ເພື່ອຮັບການຈັດສົ່ງຟຣີ
+                  {quoteLoading
+                    ? "ກຳລັງຄິດຄ່າສົ່ງ..."
+                    : `ຊື້ເພີ່ມອີກ ${formatLAK(amountUntilFree)} ເພື່ອຮັບການຈັດສົ່ງຟຣີ`}
+                </p>
+              )}
+              {shippingQuote?.free_shipping_applied && (
+                <p className="text-xs text-primary mt-4 text-center font-medium">
+                  ຮັບການຈັດສົ່ງຟຣີແລ້ວ
                 </p>
               )}
             </div>

@@ -1,20 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Search, SlidersHorizontal, Grid3X3, LayoutList, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/products/product-card";
 import { useStore } from "@/lib/store";
-
-const categories = [
-  { id: "all", nameLao: "ທັງໝົດ" },
-  { id: "supplements", nameLao: "ອາຫານເສີມ" },
-  { id: "skincare", nameLao: "ດູແລຜິວໜັງ" },
-  { id: "vitamins", nameLao: "ວິຕາມິນ" },
-  { id: "beauty", nameLao: "ຄວາມງາມ" },
-];
 
 const sortOptions = [
   { id: "newest", nameLao: "ໃໝ່ສຸດ" },
@@ -24,12 +17,29 @@ const sortOptions = [
 ];
 
 export default function ProductsPage() {
-  const { products, productsLoading, productsError } = useStore();
+  const searchParams = useSearchParams();
+  const { products, productsLoading, productsError, categories } = useStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+  const categoryFilters = useMemo(
+    () => [
+      { id: "all", nameLao: "ທັງໝົດ" },
+      ...categories.map((c) => ({
+        id: c.slug?.trim() || `category-${c.id}`,
+        nameLao: c.name,
+      })),
+    ],
+    [categories]
+  );
+
+  useEffect(() => {
+    const cat = searchParams.get("category");
+    if (cat) setSelectedCategory(cat);
+  }, [searchParams]);
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
@@ -118,7 +128,7 @@ export default function ProductsPage() {
           <div className="hidden lg:flex items-center gap-4">
             {/* Categories */}
             <div className="flex items-center gap-2">
-              {categories.map((cat) => (
+              {categoryFilters.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat.id)}
@@ -241,7 +251,7 @@ export default function ProductsPage() {
               <div>
                 <h4 className="font-medium mb-3">ໝວດໝູ່</h4>
                 <div className="flex flex-wrap gap-2">
-                  {categories.map((cat) => (
+                  {categoryFilters.map((cat) => (
                     <button
                       key={cat.id}
                       onClick={() => setSelectedCategory(cat.id)}

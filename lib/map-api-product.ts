@@ -32,6 +32,12 @@ export function apiProductToStoreProduct(api: ApiProduct): Product {
       ? Math.round(api.final_price_lak)
       : inferredFinalPriceLak(api);
 
+  const createdAt = api.created_at;
+  const isNew = createdAt
+    ? Date.now() - new Date(createdAt).getTime() <
+      30 * 24 * 60 * 60 * 1000
+    : false;
+
   return {
     id: String(api.id),
     name: api.name,
@@ -49,7 +55,8 @@ export function apiProductToStoreProduct(api: ApiProduct): Product {
     stock: 999,
     sourceUrl: api.source_url ?? "",
     trustBadges: ["ຂອງແທ້ 100%"],
-    isNew: false,
+    isNew,
     isBestSeller: false,
+    createdAt,
   };
 }

@@ -1,24 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import axios from "axios";
 import { motion } from "framer-motion";
 import {
   Search,
   ExternalLink,
-  Eye,
   ChevronRight,
   Package,
   Truck,
   CheckCircle,
   Clock,
   X,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useStore, Order } from "@/lib/store";
 import { formatLAK, formatDateLao } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
-import { apiListOrders, isApiConfigured } from "@/lib/api";
+import {
+  apiListOrders,
+  getStoredAccessToken,
+  getStoredAdminAccessToken,
+  isApiConfigured,
+} from "@/lib/api";
 import { apiOrderToStoreOrder } from "@/lib/map-api-order";
 
 const statusOptions = [
@@ -39,38 +46,83 @@ const statusConfig: Record<
   delivered: { label: "ສຳເລັດ", color: "green", icon: CheckCircle },
 };
 
+function orderItemCount(order: Order): number {
+  return order.items.reduce((sum, i) => sum + i.quantity, 0);
+}
+
+function hasOrdersBearer(): boolean {
+  return !!(getStoredAdminAccessToken() || getStoredAccessToken());
+}
+
+function formatOrdersApiError(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const status = err.response?.status;
+    const body = err.response?.data;
+    const apiMsg =
+      body && typeof body === "object" && "error" in body
+        ? String((body as { error: unknown }).error)
+        : typeof body === "string"
+          ? body
+          : err.message;
+    return [status, apiMsg].filter(Boolean).join(" — ");
+  }
+  if (err instanceof Error) return err.message;
+  return "ບໍ່ຮູ້ສາເຫດ";
+}
+
 export default function AdminOrdersPage() {
-  const { orders, updateOrderStatus, setOrders } = useStore();
+  const { updateOrderStatus, setOrders } = useStore();
   const { adminToken, isReady } = useAuth();
+  const [orders, setLocalOrders] = useState<Order[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [ordersLoadError, setOrdersLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadOrders = useCallback(async () => {
+    if (!isApiConfigured()) {
+      setOrdersLoadError("ຕັ້ງ NEXT_PUBLIC_API_URL ໃນ .env");
+      return;
+    }
+    if (!hasOrdersBearer()) {
+      setOrdersLoadError(
+        "ບໍ່ມີ Bearer token — ເຂົ້າ /admin/login (ຫຼື login ລູກຄ້າຖ້າ API ຮັບ token ນັ້ນ)"
+      );
+      return;
+    }
+
+    setLoading(true);
+    setOrdersLoadError(null);
+    try {
+      const list = await apiListOrders({ limit: 50, offset: 0 });
+      const mapped = list.map(apiOrderToStoreOrder);
+      setLocalOrders(mapped);
+      setOrders(mapped);
+      if (mapped.length === 0) {
+        setOrdersLoadError(
+          "API ຕອບສຳເລັດແຕ່ບໍ່ມີຄຳສັ່ງ — ກວດວ່າ token ໃນ browser ກັບ Insomnia ເປັນຄົນດຽວກັນ"
+        );
+      }
+    } catch (err) {
+      setOrdersLoadError(
+        `ໂຫຼດ GET /orders ບໍ່ສຳເລັດ: ${formatOrdersApiError(err)}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [setOrders]);
 
   useEffect(() => {
-    if (!isReady || !adminToken || !isApiConfigured()) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const list = await apiListOrders();
-        if (cancelled) return;
-        setOrders(list.map(apiOrderToStoreOrder));
-        setOrdersLoadError(null);
-      } catch {
-        if (!cancelled) {
-          setOrdersLoadError("ໂຫຼດ /orders ບໍ່ສຳເລັດ — ກວດ JWT");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isReady, adminToken, setOrders]);
+    if (!isReady) return;
+    void loadOrders();
+  }, [isReady, loadOrders]);
 
   const filteredOrders = orders.filter((order) => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customerInfo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.id.toLowerCase().includes(q) ||
+      order.customerInfo.name.toLowerCase().includes(q) ||
       order.customerInfo.phone.includes(searchQuery);
     const matchesStatus =
       statusFilter === "all" || order.status === statusFilter;
@@ -79,24 +131,44 @@ export default function AdminOrdersPage() {
 
   const handleStatusChange = (orderId: string, newStatus: Order["status"]) => {
     updateOrderStatus(orderId, newStatus);
+    setLocalOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+    );
     if (selectedOrder?.id === orderId) {
       setSelectedOrder({ ...selectedOrder, status: newStatus });
     }
   };
 
   return (
-    <div>
+    <motion.div>
       {ordersLoadError && (
         <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {ordersLoadError}
         </div>
       )}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">ຈັດການຄຳສັ່ງຊື້</h1>
-        <p className="text-muted-foreground">
-          ຕິດຕາມ ແລະ ຈັດການຄຳສັ່ງຊື້ຈາກລູກຄ້າ
-        </p>
-      </div>
+
+      <motion.div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <motion.div>
+          <h1 className="text-2xl font-bold text-foreground">ຈັດການຄຳສັ່ງຊື້</h1>
+          <p className="text-muted-foreground">
+            ຕິດຕາມ ແລະ ຈັດການຄຳສັ່ງຊື້ຈາກ API (GET /orders)
+          </p>
+        </motion.div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void loadOrders()}
+          disabled={loading || !hasOrdersBearer()}
+          className="shrink-0"
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          ໂຫຼດໃໝ່
+        </Button>
+      </motion.div>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -114,6 +186,7 @@ export default function AdminOrdersPage() {
           {statusOptions.map((status) => (
             <button
               key={status.id}
+              type="button"
               onClick={() => setStatusFilter(status.id)}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                 statusFilter === status.id
@@ -127,32 +200,38 @@ export default function AdminOrdersPage() {
         </div>
       </div>
 
-      {/* Orders Table */}
+      {/* Orders list */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {filteredOrders.length > 0 ? (
+        {loading && orders.length === 0 ? (
+          <div className="p-12 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <p className="text-muted-foreground text-sm">ກຳລັງໂຫຼດຄຳສັ່ງຊື້...</p>
+          </div>
+        ) : filteredOrders.length > 0 ? (
           <div className="divide-y divide-border">
             {filteredOrders.map((order) => {
               const status = statusConfig[order.status];
               const StatusIcon = status.icon;
+              const itemCount = orderItemCount(order);
               return (
                 <motion.div
-                  key={order.id}
+                  key={`${order.apiId ?? order.id}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="p-4 hover:bg-muted/30 cursor-pointer"
                   onClick={() => setSelectedOrder(order)}
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
+                  <motion.div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0">
                       <div
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
                           status.color === "orange"
                             ? "bg-orange-100"
                             : status.color === "blue"
-                            ? "bg-blue-100"
-                            : status.color === "purple"
-                            ? "bg-purple-100"
-                            : "bg-green-100"
+                              ? "bg-blue-100"
+                              : status.color === "purple"
+                                ? "bg-purple-100"
+                                : "bg-green-100"
                         }`}
                       >
                         <StatusIcon
@@ -160,47 +239,49 @@ export default function AdminOrdersPage() {
                             status.color === "orange"
                               ? "text-orange-600"
                               : status.color === "blue"
-                              ? "text-blue-600"
-                              : status.color === "purple"
-                              ? "text-purple-600"
-                              : "text-green-600"
+                                ? "text-blue-600"
+                                : status.color === "purple"
+                                  ? "text-purple-600"
+                                  : "text-green-600"
                           }`}
                         />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-medium">{order.id}</p>
                           <span
                             className={`text-xs px-2 py-0.5 rounded-full ${
                               status.color === "orange"
                                 ? "bg-orange-100 text-orange-600"
                                 : status.color === "blue"
-                                ? "bg-blue-100 text-blue-600"
-                                : status.color === "purple"
-                                ? "bg-purple-100 text-purple-600"
-                                : "bg-green-100 text-green-600"
+                                  ? "bg-blue-100 text-blue-600"
+                                  : status.color === "purple"
+                                    ? "bg-purple-100 text-purple-600"
+                                    : "bg-green-100 text-green-600"
                             }`}
                           >
                             {status.label}
                           </span>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {order.customerInfo.name} |{" "}
-                          {order.customerInfo.province}
+                        <p className="text-sm text-muted-foreground truncate">
+                          {order.customerInfo.name} | {order.customerInfo.phone}{" "}
+                          | {order.customerInfo.province}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {order.paymentMethod}
                         </p>
                       </div>
                     </div>
-                    <div className="text-right hidden sm:block">
+                    <div className="text-right hidden sm:block shrink-0">
                       <p className="font-medium text-primary">
                         {formatLAK(order.totalLAK)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {order.items.length} ລາຍການ |{" "}
-                        {formatDateLao(order.createdAt)}
+                        {itemCount} ລາຍການ | {formatDateLao(order.createdAt)}
                       </p>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  </motion.div>
                 </motion.div>
               );
             })}
@@ -209,42 +290,45 @@ export default function AdminOrdersPage() {
           <div className="p-12 text-center">
             <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
-              {orders.length === 0
-                ? "ຍັງບໍ່ມີຄຳສັ່ງຊື້"
+              {orders.length === 0 && !loading
+                ? "ຍັງບໍ່ມີຄຳສັ່ງຊື້ — ລອງກົດ «ໂຫຼດໃໝ່» ຫຼັງມີຄຳສັ່ງໃນ API"
                 : "ບໍ່ພົບຄຳສັ່ງຊື້ທີ່ຄົ້ນຫາ"}
             </p>
           </div>
         )}
       </div>
 
-      {/* Order Detail Modal */}
+      {/* Detail drawer */}
       {selectedOrder && (
         <>
           <div
             className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50"
             onClick={() => setSelectedOrder(null)}
+            aria-hidden
           />
           <motion.div
             initial={{ opacity: 0, x: "100%" }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: "100%" }}
             className="fixed top-0 right-0 bottom-0 w-full max-w-lg bg-background border-l border-border z-50 overflow-auto"
           >
-            <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 bg-background z-10">
               <h2 className="text-lg font-bold">ລາຍລະອຽດຄຳສັ່ງຊື້</h2>
-              <button onClick={() => setSelectedOrder(null)}>
+              <button type="button" onClick={() => setSelectedOrder(null)}>
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="p-4 space-y-6">
-              {/* Order ID & Status */}
               <div>
                 <p className="text-sm text-muted-foreground mb-1">ເລກທີ່ຄຳສັ່ງ</p>
                 <p className="text-xl font-bold">{selectedOrder.id}</p>
+                {selectedOrder.apiId != null && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ID: {selectedOrder.apiId}
+                  </p>
+                )}
               </div>
 
-              {/* Status Selector */}
               <div>
                 <p className="text-sm font-medium mb-2">ສະຖານະ</p>
                 <div className="flex flex-wrap gap-2">
@@ -255,6 +339,7 @@ export default function AdminOrdersPage() {
                     return (
                       <button
                         key={status}
+                        type="button"
                         onClick={() =>
                           handleStatusChange(selectedOrder.id, status)
                         }
@@ -263,10 +348,10 @@ export default function AdminOrdersPage() {
                             ? config.color === "orange"
                               ? "bg-orange-500 text-white"
                               : config.color === "blue"
-                              ? "bg-blue-500 text-white"
-                              : config.color === "purple"
-                              ? "bg-purple-500 text-white"
-                              : "bg-green-500 text-white"
+                                ? "bg-blue-500 text-white"
+                                : config.color === "purple"
+                                  ? "bg-purple-500 text-white"
+                                  : "bg-green-500 text-white"
                             : "bg-muted text-muted-foreground hover:bg-muted/80"
                         }`}
                       >
@@ -276,10 +361,12 @@ export default function AdminOrdersPage() {
                     );
                   })}
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  ອັບເດດສະຖານະໃນແອັບເທົ່ານັ້ນ (ຍັງບໍ່ sync ກັບ API)
+                </p>
               </div>
 
-              {/* Customer Info */}
-              <div className="bg-muted/50 rounded-xl p-4">
+              <motion.div className="bg-muted/50 rounded-xl p-4">
                 <p className="text-sm font-medium mb-3">ຂໍ້ມູນລູກຄ້າ</p>
                 <div className="space-y-2 text-sm">
                   <p>
@@ -299,69 +386,64 @@ export default function AdminOrdersPage() {
                     {selectedOrder.customerInfo.address}
                   </p>
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Order Items */}
               <div>
                 <p className="text-sm font-medium mb-3">ສິນຄ້າທີ່ສັ່ງ</p>
-                <div className="space-y-3">
-                  {selectedOrder.items.map((item) => (
-                    <div
-                      key={item.product.id}
-                      className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg"
-                    >
-                      <img
-                        src={item.product.images[0]}
-                        alt={item.product.nameLao}
-                        className="w-14 h-14 rounded-lg object-cover"
-                        crossOrigin="anonymous"
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">
-                          {item.product.nameLao}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          x{item.quantity} |{" "}
-                          {formatLAK(item.product.priceLAK * item.quantity)}
-                        </p>
+                {selectedOrder.items.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedOrder.items.map((item, idx) => (
+                      <div
+                        key={`${item.product.id}-${idx}`}
+                        className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <Package className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {item.product.nameLao}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            ID {item.product.id} · x{item.quantity} ·{" "}
+                            {formatLAK(item.product.priceLAK * item.quantity)}
+                          </p>
+                        </div>
                       </div>
-                      {item.product.sourceUrl && (
-                        <a
-                          href={item.product.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-                          title="ໄປຫາແຫຼ່ງສິນຄ້າ"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">ບໍ່ມີລາຍການສິນຄ້າ</p>
+                )}
               </div>
 
-              {/* Payment */}
-              <div className="bg-muted/50 rounded-xl p-4">
-                <p className="text-sm font-medium mb-3">ການຊຳລະເງິນ</p>
-                <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-muted-foreground">ວິທີຊຳລະ:</span>
-                  <span>
-                    {selectedOrder.paymentMethod === "bcel"
-                      ? "BCEL One"
-                      : "ເກັບເງິນປາຍທາງ"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-lg font-bold">
-                  <span>ລວມທັງໝົດ:</span>
+              <div className="bg-muted/50 rounded-xl p-4 space-y-2 text-sm">
+                <p className="text-sm font-medium mb-2">ສະຫຼຸບຍອດເງິນ</p>
+                {selectedOrder.subtotalLAK != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">ລາຄາສິນຄ້າ</span>
+                    <span>{formatLAK(selectedOrder.subtotalLAK)}</span>
+                  </div>
+                )}
+                {selectedOrder.shippingFeeLAK != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">ຄ່າຈັດສົ່ງ</span>
+                    <span>{formatLAK(selectedOrder.shippingFeeLAK)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-border">
+                  <span>ລວມທັງໝົດ</span>
                   <span className="text-primary">
                     {formatLAK(selectedOrder.totalLAK)}
                   </span>
                 </div>
+                <div className="flex justify-between pt-1">
+                  <span className="text-muted-foreground">ວິທີຊຳລະ</span>
+                  <span>{selectedOrder.paymentMethod}</span>
+                </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 pb-6">
                 <Button
                   variant="outline"
                   className="flex-1"
@@ -372,13 +454,15 @@ export default function AdminOrdersPage() {
                 <Button
                   className="flex-1"
                   onClick={() => {
-                    // Go to source links for all items
                     selectedOrder.items.forEach((item) => {
                       if (item.product.sourceUrl) {
                         window.open(item.product.sourceUrl, "_blank");
                       }
                     });
                   }}
+                  disabled={
+                    !selectedOrder.items.some((i) => i.product.sourceUrl)
+                  }
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
                   ໄປສັ່ງຊື້
@@ -388,6 +472,6 @@ export default function AdminOrdersPage() {
           </motion.div>
         </>
       )}
-    </div>
+    </motion.div>
   );
 }
