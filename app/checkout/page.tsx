@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
@@ -18,6 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
 import { formatLAK } from "@/lib/format";
+import { useAuth } from "@/lib/auth";
+import { apiCreateOrder } from "@/lib/api";
 
 const steps = [
   { id: 1, nameLao: "ທີ່ຢູ່ຈັດສົ່ງ", icon: Truck },
@@ -48,8 +51,10 @@ const provinces = [
 export default function CheckoutPage() {
   const router = useRouter();
   const { cart, cartTotal, clearCart, addOrder } = useStore();
+  const { token } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   const [shippingInfo, setShippingInfo] = useState({
     name: "",
@@ -74,9 +79,26 @@ export default function CheckoutPage() {
 
   const handleConfirmOrder = async () => {
     setIsSubmitting(true);
-    
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    setOrderError(null);
+
+    let serverId: string | undefined;
+    if (token) {
+      try {
+        const receipt =
+          paymentMethod === "bcel"
+            ? "pending-receipt-upload"
+            : "";
+        const created = await apiCreateOrder({
+          total_amount_lak: Math.round(totalAmount),
+          payment_receipt_url: receipt,
+        });
+        serverId = created?.id != null ? String(created.id) : undefined;
+      } catch {
+        setOrderError(
+          "ບັນທຶກຄຳສັ່ງຜ່ານ API ບໍ່ສຳເລັດ (ກວດ JWT ແລະ backend). ຍັງບັນທຶກໃນແອັບຕໍ່ໄປ."
+        );
+      }
+    }
 
     addOrder({
       items: cart,
@@ -84,10 +106,12 @@ export default function CheckoutPage() {
       paymentMethod,
       status: "pending",
       totalLAK: totalAmount,
+      ...(serverId ? { id: serverId } : {}),
     });
 
     clearCart();
     router.push("/checkout/success");
+    setIsSubmitting(false);
   };
 
   if (cart.length === 0) {
@@ -346,6 +370,22 @@ export default function CheckoutPage() {
                   exit={{ opacity: 0, x: -20 }}
                 >
                   <h2 className="text-2xl font-bold mb-6">ຢືນຢັນຄຳສັ່ງຊື້</h2>
+
+                  {!token && (
+                    <p className="text-sm text-muted-foreground mb-4 rounded-lg border border-border bg-muted/40 px-3 py-2">
+                      ບໍ່ໄດ້ເຂົ້າລະບົບ — ຄຳສັ່ງບັນທຶກໃນແອັບເທົ່ານັ້ນ. ຖ້າຕ້ອງການ POST /orders ກະລຸນາ{" "}
+                      <Link href="/login" className="text-primary font-medium underline">
+                        ເຂົ້າລະບົບລູກຄ້າ
+                      </Link>{" "}
+                      ກ່ອນ (JWT ຈາກ API).
+                    </p>
+                  )}
+
+                  {orderError && (
+                    <p className="text-sm text-destructive mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2">
+                      {orderError}
+                    </p>
+                  )}
 
                   {/* Shipping Info Summary */}
                   <div className="bg-muted/50 rounded-xl p-4 mb-6">

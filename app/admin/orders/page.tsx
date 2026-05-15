@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -17,6 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useStore, Order } from "@/lib/store";
 import { formatLAK, formatDateLao } from "@/lib/format";
+import { useAuth } from "@/lib/auth";
+import { apiListOrders, isApiConfigured } from "@/lib/api";
+import { apiOrderToStoreOrder } from "@/lib/map-api-order";
 
 const statusOptions = [
   { id: "all", label: "ທັງໝົດ" },
@@ -37,10 +40,32 @@ const statusConfig: Record<
 };
 
 export default function AdminOrdersPage() {
-  const { orders, updateOrderStatus } = useStore();
+  const { orders, updateOrderStatus, setOrders } = useStore();
+  const { token, isReady } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [ordersLoadError, setOrdersLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isReady || !token || !isApiConfigured()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await apiListOrders();
+        if (cancelled) return;
+        setOrders(list.map(apiOrderToStoreOrder));
+        setOrdersLoadError(null);
+      } catch {
+        if (!cancelled) {
+          setOrdersLoadError("ໂຫຼດ /orders ບໍ່ສຳເລັດ — ກວດ JWT");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isReady, token, setOrders]);
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
@@ -61,6 +86,11 @@ export default function AdminOrdersPage() {
 
   return (
     <div>
+      {ordersLoadError && (
+        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {ordersLoadError}
+        </div>
+      )}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground">ຈັດການຄຳສັ່ງຊື້</h1>
         <p className="text-muted-foreground">

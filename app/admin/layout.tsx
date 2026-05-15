@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard,
   Package,
@@ -13,6 +15,7 @@ import {
   X,
   ChevronRight,
   Sparkles,
+  LogOut,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -24,13 +27,53 @@ const navItems = [
   { href: "/admin/settings", label: "ຕັ້ງຄ່າ", icon: Settings },
 ];
 
+function AuthGateShell({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-muted/30 px-4">
+      <p className="text-sm text-muted-foreground text-center">{message}</p>
+    </div>
+  );
+}
+
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { user, token, isReady, logout } = useAuth();
+
+  const isLoginRoute = pathname === "/admin/login";
+  const requiresAuth = !isLoginRoute;
+
+  useEffect(() => {
+    if (!isReady || !requiresAuth) return;
+    if (!token) {
+      router.replace("/admin/login");
+    }
+  }, [isReady, requiresAuth, token, router]);
+
+  const handleLogout = () => {
+    logout();
+    setIsSidebarOpen(false);
+    router.push("/admin/login");
+  };
+
+  if (isLoginRoute) {
+    return <>{children}</>;
+  }
+
+  if (!isReady) {
+    return <AuthGateShell message="ກຳລັງໂຫຼດ..." />;
+  }
+
+  if (!token) {
+    return (
+      <AuthGateShell message="ຕ້ອງເຂົ້າລະບົບກ່ອນ — ກຳລັງໄປໜ້າເຂົ້າລະບົບແອັດມິນ..." />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -41,7 +84,16 @@ export default function AdminLayout({
             <Menu className="h-6 w-6" />
           </button>
           <span className="font-bold">ແອັດມິນ</span>
-          <div className="w-6" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleLogout}
+            aria-label="ອອກຈາກລະບົບ"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="text-xs font-medium">ອອກ</span>
+          </Button>
         </div>
       </header>
 
@@ -60,7 +112,7 @@ export default function AdminLayout({
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
-              className="fixed top-0 left-0 bottom-0 w-64 bg-card border-r border-border z-50 lg:hidden"
+              className="fixed top-0 left-0 bottom-0 w-64 bg-card border-r border-border z-50 lg:hidden flex flex-col"
             >
               <div className="flex items-center justify-between h-16 px-4 border-b border-border">
                 <Link href="/" className="flex items-center gap-2">
@@ -73,7 +125,7 @@ export default function AdminLayout({
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <nav className="p-4 space-y-1">
+              <nav className="flex-1 overflow-y-auto p-4 space-y-1">
                 {navItems.map((item) => (
                   <Link
                     key={item.href}
@@ -90,6 +142,16 @@ export default function AdminLayout({
                   </Link>
                 ))}
               </nav>
+              <div className="border-t border-border p-4 mt-auto">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-2 text-destructive hover:text-destructive"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  ອອກຈາກລະບົບ
+                </Button>
+              </div>
             </motion.aside>
           </>
         )}
@@ -122,7 +184,15 @@ export default function AdminLayout({
               </Link>
             ))}
           </nav>
-          <div className="p-4 border-t border-border">
+          <div className="p-4 border-t border-border space-y-2">
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-2 text-destructive hover:text-destructive"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              ອອກຈາກລະບົບ
+            </Button>
             <Link
               href="/"
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -135,6 +205,28 @@ export default function AdminLayout({
 
         {/* Main Content */}
         <main className="flex-1 min-h-screen">
+          <div className="border-b border-border bg-card px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              ຜູ້ໃຊ້:{" "}
+              <span className="font-medium text-foreground">
+                {user
+                  ? String(user.username ?? user.id ?? "—")
+                  : "…"}
+              </span>
+              {user?.role != null && (
+                <span className="ml-2 text-xs">({String(user.role)})</span>
+              )}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4" />
+              ອອກຈາກລະບົບ
+            </Button>
+          </div>
           <div className="p-6">{children}</div>
         </main>
       </div>
