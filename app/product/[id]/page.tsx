@@ -23,6 +23,7 @@ import { formatLAK } from "@/lib/format";
 import { ProductCard } from "@/components/products/product-card";
 import { apiGetProduct, isApiConfigured } from "@/lib/api";
 import { apiProductToStoreProduct } from "@/lib/map-api-product";
+import { ProductImage } from "@/components/products/product-image";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -126,11 +127,10 @@ export default function ProductDetailPage() {
           >
             {/* Main Image */}
             <div className="relative aspect-square bg-muted rounded-xl overflow-hidden">
-              <img
+              <ProductImage
                 src={product.images[selectedImageIndex]}
                 alt={product.nameLao}
                 className="w-full h-full object-cover"
-                crossOrigin="anonymous"
               />
 
               {/* Navigation Arrows */}
@@ -187,11 +187,10 @@ export default function ProductDetailPage() {
                         : "border-transparent hover:border-muted-foreground/30"
                     }`}
                   >
-                    <img
+                    <ProductImage
                       src={image}
                       alt={`${product.nameLao} ${index + 1}`}
                       className="w-full h-full object-cover"
-                      crossOrigin="anonymous"
                     />
                   </button>
                 ))}

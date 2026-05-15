@@ -1,8 +1,6 @@
 import type { ApiProduct } from "@/lib/api-types";
 import type { Product } from "@/lib/store";
-
-const PLACEHOLDER_IMG =
-  "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop";
+import { normalizeProductImageUrl } from "@/lib/product-image";
 
 /** Backend profit_margin is often a ratio (e.g. 0.1 = 10%). */
 export function profitMarginToPercent(value: number): number {
@@ -20,7 +18,7 @@ function inferredFinalPriceLak(api: ApiProduct): number {
 }
 
 export function apiProductToStoreProduct(api: ApiProduct): Product {
-  const img = api.image_url?.trim() ? api.image_url : PLACEHOLDER_IMG;
+  const img = normalizeProductImageUrl(api.image_url);
   const nested = api.category;
   const slug =
     nested?.slug?.trim() ||

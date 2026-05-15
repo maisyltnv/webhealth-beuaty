@@ -7,6 +7,7 @@ import { ShoppingCart, Heart, Eye, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Product, useStore } from "@/lib/store";
 import { formatLAK } from "@/lib/format";
+import { ProductImage } from "@/components/products/product-image";
 
 interface ProductCardProps {
   product: Product;
@@ -40,11 +41,10 @@ export function ProductCard({ product }: ProductCardProps) {
         >
           {/* Image Container */}
           <div className="relative aspect-square overflow-hidden bg-muted">
-            <img
+            <ProductImage
               src={product.images[0]}
               alt={product.nameLao}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              crossOrigin="anonymous"
             />
 
             {/* Badges */}

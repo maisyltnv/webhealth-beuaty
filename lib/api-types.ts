@@ -64,7 +64,19 @@ export interface ApiCreateProductBody {
   source_url?: string;
 }
 
-export type ApiUpdateProductBody = Partial<ApiCreateProductBody>;
+/** PUT /products/:id — partial update (ສົ່ງແຕ່ຟິວທີ່ຕ້ອງປ່ຽນ; ບໍ່ສົ່ງ clear_category ກັບ category_id ພ້ອມກັນ) */
+export interface ApiUpdateProductBody {
+  name?: string;
+  description?: string;
+  image_url?: string;
+  category_id?: number;
+  clear_category?: boolean;
+  original_price_cny?: number;
+  exchange_rate?: number;
+  profit_margin?: number;
+  final_price_lak?: number;
+  source_url?: string;
+}
 
 export interface ApiCreateOrderBody {
   total_amount_lak: number;

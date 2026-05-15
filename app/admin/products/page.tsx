@@ -21,11 +21,23 @@ import { useAuth } from "@/lib/auth";
 import {
   apiCreateProduct,
   apiDeleteProduct,
+  apiGetProduct,
   apiListCategories,
+  apiUpdateProduct,
   isApiConfigured,
 } from "@/lib/api";
 import type { ApiCategory } from "@/lib/api-types";
-import { marginPercentToRatio } from "@/lib/map-api-product";
+import {
+  marginPercentToRatio,
+  profitMarginToPercent,
+} from "@/lib/map-api-product";
+import {
+  IMAGE_URL_FIELD_HINT,
+  IMAGE_VIEWER_PAGE_WARNING,
+  PRODUCT_PLACEHOLDER_IMAGE,
+  isImageViewerPageUrl,
+} from "@/lib/product-image";
+import { ProductImage } from "@/components/products/product-image";
 
 export default function AdminProductsPage() {
   const { products, setProducts, exchangeRate, refreshProducts } = useStore();
@@ -35,6 +47,9 @@ export default function AdminProductsPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [loadingEditProduct, setLoadingEditProduct] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("ເພີ່ມສິນຄ້າສຳເລັດ!");
 
   const [apiCategories, setApiCategories] = useState<ApiCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
@@ -90,17 +105,112 @@ export default function AdminProductsPage() {
     void loadCategories();
   }, [loadCategories]);
 
+  const getDefaultCategory = () =>
+    apiCategories[0] ? String(apiCategories[0].id) : "";
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingProductId(null);
+    setLoadingEditProduct(false);
+  };
+
+  const openCreateModal = () => {
+    setApiError(null);
+    setEditingProductId(null);
+    setSaveMessage("ເພີ່ມສິນຄ້າສຳເລັດ!");
+    setNewProduct({
+      name: "",
+      nameLao: "",
+      description: "",
+      descriptionLao: "",
+      howToUse: "",
+      howToUseLao: "",
+      priceCNY: "",
+      marginPercent: "50",
+      category: getDefaultCategory(),
+      stock: "50",
+      sourceUrl: "",
+      imageUrl: "",
+    });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = async (product: Product) => {
+    setApiError(null);
+    setEditingProductId(product.id);
+    setSaveMessage("ອັບເດດສິນຄ້າສຳເລັດ!");
+    setIsModalOpen(true);
+
+    const fillFromStore = () => {
+      const cat = apiCategories.find(
+        (c) => c.slug === product.category || c.name === product.categoryLao
+      );
+      setNewProduct({
+        name: product.name,
+        nameLao: product.nameLao,
+        description: product.description,
+        descriptionLao: product.descriptionLao,
+        howToUse: product.howToUse,
+        howToUseLao: product.howToUseLao,
+        priceCNY: String(product.priceCNY),
+        marginPercent: String(product.marginPercent),
+        category: cat
+          ? String(cat.id)
+          : apiCategories[0]
+            ? String(apiCategories[0].id)
+            : "",
+        stock: String(product.stock),
+        sourceUrl: product.sourceUrl,
+        imageUrl: product.images[0] ?? "",
+      });
+    };
+
+    if (isApiConfigured() && adminToken && /^\d+$/.test(product.id)) {
+      setLoadingEditProduct(true);
+      try {
+        const api = await apiGetProduct(product.id);
+        const cid = api.category_id ?? api.category?.id;
+        const marginPct = profitMarginToPercent(api.profit_margin);
+        setNewProduct({
+          name: product.name,
+          nameLao: api.name,
+          description: product.description,
+          descriptionLao: api.description ?? "",
+          howToUse: product.howToUse,
+          howToUseLao: product.howToUseLao,
+          priceCNY: String(api.original_price_cny),
+          marginPercent: String(marginPct),
+          category: cid != null ? String(cid) : "",
+          stock: String(product.stock),
+          sourceUrl: api.source_url ?? product.sourceUrl ?? "",
+          imageUrl:
+            api.image_url?.trim() || product.images[0] || "",
+        });
+      } catch {
+        fillFromStore();
+        setApiError(
+          "ໂຫຼດສິນຄ້າຈາກ API ບໍ່ສຳເລັດ — ສະແດງຂໍ້ມູນຈາກລາຍການ"
+        );
+      } finally {
+        setLoadingEditProduct(false);
+      }
+      return;
+    }
+
+    fillFromStore();
+  };
+
   const filteredProducts = products.filter(
     (p) =>
       p.nameLao.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddProduct = async () => {
+  const handleSaveProduct = async () => {
     setApiError(null);
     const priceCNY = parseFloat(newProduct.priceCNY);
     const marginPercent = parseFloat(newProduct.marginPercent);
-    const stock = parseInt(newProduct.stock);
+    const stock = parseInt(newProduct.stock, 10);
 
     if (isNaN(priceCNY) || isNaN(marginPercent) || isNaN(stock)) return;
 
@@ -109,6 +219,129 @@ export default function AdminProductsPage() {
     );
     const storeSlug = selectedCat?.slug ?? "uncategorized";
     const storeNameLao = selectedCat?.name ?? "ສິນຄ້າ";
+
+    const resetForm = () => {
+      setNewProduct({
+        name: "",
+        nameLao: "",
+        description: "",
+        descriptionLao: "",
+        howToUse: "",
+        howToUseLao: "",
+        priceCNY: "",
+        marginPercent: "50",
+        category: getDefaultCategory(),
+        stock: "50",
+        sourceUrl: "",
+        imageUrl: "",
+      });
+    };
+
+    const afterApiSave = () => {
+      resetForm();
+      closeModal();
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    };
+
+    const trimmedImageUrl = newProduct.imageUrl.trim();
+    if (trimmedImageUrl && isImageViewerPageUrl(trimmedImageUrl)) {
+      setApiError(IMAGE_VIEWER_PAGE_WARNING);
+      return;
+    }
+
+    const imageUrlForApi = trimmedImageUrl || PRODUCT_PLACEHOLDER_IMAGE;
+
+    if (editingProductId) {
+      const finishLocalEdit = () => {
+        setProducts(
+          products.map((p) =>
+            p.id === editingProductId
+              ? {
+                  ...p,
+                  name: newProduct.name,
+                  nameLao: newProduct.nameLao,
+                  description: newProduct.description,
+                  descriptionLao: newProduct.descriptionLao,
+                  howToUse: newProduct.howToUse,
+                  howToUseLao: newProduct.howToUseLao,
+                  priceCNY,
+                  marginPercent,
+                  priceLAK: calculateSellingPrice(
+                    priceCNY,
+                    marginPercent,
+                    exchangeRate
+                  ),
+                  category: storeSlug,
+                  categoryLao: storeNameLao,
+                  stock,
+                  sourceUrl: newProduct.sourceUrl,
+                  images: [
+                    newProduct.imageUrl.trim() || p.images[0] || imageUrlForApi,
+                  ],
+                }
+              : p
+          )
+        );
+        afterApiSave();
+      };
+
+      if (!isApiConfigured() || !adminToken) {
+        finishLocalEdit();
+        if (isApiConfigured() && !adminToken) {
+          setApiError(
+            "ບໍ່ມີ JWT — ບັນທຶກແບບທ້ອງຖິ່ນເທົ່ານັ້ນ. ໄປ /admin/login ເພື່ອ sync ກັບ API"
+          );
+        }
+        return;
+      }
+
+      if (!/^\d+$/.test(editingProductId)) {
+        finishLocalEdit();
+        return;
+      }
+
+      if (categoriesLoading) {
+        setApiError("ກຳລັງໂຫຼດໝວດໝູ່ — ລໍຖ້າຊົ່ວຄາວ");
+        return;
+      }
+
+      if (apiCategories.length === 0) {
+        setApiError(
+          "ບໍ່ມີໝວດໝູ່ຈາກ API — ສ້າງໝວດໝູ່ທີ່ /admin/categories ກ່ອນ"
+        );
+        return;
+      }
+
+      if (!selectedCat) {
+        setApiError("ເລືອກໝວດໝູ່");
+        return;
+      }
+
+      setPendingAction(true);
+      try {
+        await apiUpdateProduct(editingProductId, {
+          name: newProduct.nameLao || newProduct.name || "ສິນຄ້າ",
+          description:
+            newProduct.descriptionLao || newProduct.description || "",
+          image_url: imageUrlForApi,
+          category_id: selectedCat.id,
+          original_price_cny: priceCNY,
+          exchange_rate: exchangeRate,
+          profit_margin: marginPercentToRatio(marginPercent),
+          source_url: newProduct.sourceUrl.trim() || undefined,
+        });
+        await refreshProducts();
+        afterApiSave();
+      } catch {
+        setApiError(
+          "ອັບເດດສິນຄ້າຜ່ານ API ບໍ່ສຳເລັດ — ກວດຂໍ້ມູນ ແລະ backend"
+        );
+      } finally {
+        setPendingAction(false);
+      }
+      return;
+    }
 
     const finishLocal = () => {
       const product: Product = {
@@ -120,12 +353,13 @@ export default function AdminProductsPage() {
         howToUse: newProduct.howToUse,
         howToUseLao: newProduct.howToUseLao,
         priceCNY,
-        priceLAK: calculateSellingPrice(priceCNY, marginPercent, exchangeRate),
+        priceLAK: calculateSellingPrice(
+          priceCNY,
+          marginPercent,
+          exchangeRate
+        ),
         marginPercent,
-        images: [
-          newProduct.imageUrl ||
-            "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop",
-        ],
+        images: [imageUrlForApi],
         category: storeSlug,
         categoryLao: storeNameLao,
         stock,
@@ -135,23 +369,10 @@ export default function AdminProductsPage() {
         isBestSeller: false,
       };
       setProducts([product, ...products]);
-      setIsModalOpen(false);
+      resetForm();
+      closeModal();
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
-      setNewProduct({
-        name: "",
-        nameLao: "",
-        description: "",
-        descriptionLao: "",
-        howToUse: "",
-        howToUseLao: "",
-        priceCNY: "",
-        marginPercent: "50",
-        category: apiCategories[0] ? String(apiCategories[0].id) : "",
-        stock: "50",
-        sourceUrl: "",
-        imageUrl: "",
-      });
     };
 
     if (!isApiConfigured() || !adminToken) {
@@ -190,29 +411,11 @@ export default function AdminProductsPage() {
         exchange_rate: exchangeRate,
         profit_margin: marginPercentToRatio(marginPercent),
         description: newProduct.descriptionLao || newProduct.description || "",
-        image_url:
-          newProduct.imageUrl.trim() ||
-          "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop",
+        image_url: imageUrlForApi,
         source_url: newProduct.sourceUrl.trim() || "https://example.com",
       });
       await refreshProducts();
-      setIsModalOpen(false);
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 2000);
-      setNewProduct({
-        name: "",
-        nameLao: "",
-        description: "",
-        descriptionLao: "",
-        howToUse: "",
-        howToUseLao: "",
-        priceCNY: "",
-        marginPercent: "50",
-        category: apiCategories[0] ? String(apiCategories[0].id) : "",
-        stock: "50",
-        sourceUrl: "",
-        imageUrl: "",
-      });
+      afterApiSave();
     } catch {
       setApiError("ເພີ່ມສິນຄ້າຜ່ານ API ບໍ່ສຳເລັດ — ກວດຂໍ້ມູນ ແລະ backend");
     } finally {
@@ -252,7 +455,7 @@ export default function AdminProductsPage() {
             ເພີ່ມ ແລະ ຈັດການສິນຄ້າສຳລັບ Dropship
           </p>
         </div>
-        <Button onClick={() => setIsModalOpen(true)}>
+        <Button onClick={openCreateModal}>
           <Plus className="h-4 w-4 mr-2" />
           ເພີ່ມສິນຄ້າໃໝ່
         </Button>
@@ -279,6 +482,7 @@ export default function AdminProductsPage() {
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left p-4 font-medium text-sm">ສິນຄ້າ</th>
+                <th className="text-left p-4 font-medium text-sm">ໝວດໝູ່</th>
                 <th className="text-left p-4 font-medium text-sm">ລາຄາຕົ້ນ (CNY)</th>
                 <th className="text-left p-4 font-medium text-sm">ລາຄາຂາຍ (LAK)</th>
                 <th className="text-left p-4 font-medium text-sm">ກຳໄລ %</th>
@@ -297,11 +501,10 @@ export default function AdminProductsPage() {
                 >
                   <td className="p-4">
                     <div className="flex items-center gap-3">
-                      <img
+                      <ProductImage
                         src={product.images[0]}
                         alt={product.nameLao}
                         className="w-12 h-12 rounded-lg object-cover"
-                        crossOrigin="anonymous"
                       />
                       <div>
                         <p className="font-medium">{product.nameLao}</p>
@@ -311,6 +514,7 @@ export default function AdminProductsPage() {
                       </div>
                     </div>
                   </td>
+                  <td className="p-4 text-sm">{product.categoryLao}</td>
                   <td className="p-4 text-sm">¥{product.priceCNY}</td>
                   <td className="p-4 text-sm font-medium text-primary">
                     {formatLAK(product.priceLAK)}
@@ -344,7 +548,12 @@ export default function AdminProductsPage() {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center justify-end gap-2">
-                      <button className="p-2 hover:bg-muted rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => void openEditModal(product)}
+                        className="p-2 hover:bg-muted rounded-lg"
+                        disabled={pendingAction}
+                      >
                         <Edit className="h-4 w-4 text-muted-foreground" />
                       </button>
                       <button
@@ -374,21 +583,29 @@ export default function AdminProductsPage() {
         <>
           <div
             className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50"
-            onClick={() => setIsModalOpen(false)}
+            onClick={() => !pendingAction && closeModal()}
           />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-auto bg-background border border-border rounded-xl z-50 p-6"
-          >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-auto bg-background border border-border rounded-xl z-50 p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">ເພີ່ມສິນຄ້າໃໝ່</h2>
-              <button onClick={() => setIsModalOpen(false)}>
+              <h2 className="text-xl font-bold">
+                {editingProductId ? "ແກ້ໄຂສິນຄ້າ" : "ເພີ່ມສິນຄ້າໃໝ່"}
+              </h2>
+              <button type="button" onClick={() => !pendingAction && closeModal()}>
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative">
+              {loadingEditProduct && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/70">
+                  <p className="text-sm text-muted-foreground">ກຳລັງໂຫຼດຂໍ້ມູນ...</p>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium mb-2">
                   ຊື່ສິນຄ້າ (ລາວ)
@@ -526,8 +743,27 @@ export default function AdminProductsPage() {
                   onChange={(e) =>
                     setNewProduct({ ...newProduct, imageUrl: e.target.value })
                   }
-                  placeholder="https://..."
+                  placeholder="https://cdn.example.com/photo.jpg"
                 />
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {IMAGE_URL_FIELD_HINT}
+                </p>
+                {newProduct.imageUrl.trim() &&
+                  isImageViewerPageUrl(newProduct.imageUrl) && (
+                    <p className="mt-1 text-xs text-destructive">
+                      {IMAGE_VIEWER_PAGE_WARNING}
+                    </p>
+                  )}
+                {newProduct.imageUrl.trim() &&
+                  !isImageViewerPageUrl(newProduct.imageUrl) && (
+                    <motion.div className="mt-2 h-24 w-24 overflow-hidden rounded-lg border border-border bg-muted">
+                      <ProductImage
+                        src={newProduct.imageUrl}
+                        alt="ຕົວຢ່າງຮູບ"
+                        className="h-full w-full object-cover"
+                      />
+                    </motion.div>
+                  )}
               </div>
 
               {/* Preview */}
@@ -552,12 +788,24 @@ export default function AdminProductsPage() {
             </div>
 
             <div className="flex items-center gap-3 mt-6 pt-6 border-t border-border">
-              <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => !pendingAction && closeModal()}
+                type="button"
+              >
                 ຍົກເລີກ
               </Button>
-              <Button onClick={handleAddProduct} className="flex-1" disabled={pendingAction}>
+              <Button
+                onClick={() => void handleSaveProduct()}
+                className="flex-1"
+                disabled={pendingAction || loadingEditProduct}
+              >
                 <Upload className="h-4 w-4 mr-2" />
-                {pendingAction ? "ກຳລັງບັນທຶກ..." : "ເພີ່ມສິນຄ້າ"}
+                {pendingAction
+                  ? "ກຳລັງບັນທຶກ..."
+                  : editingProductId
+                    ? "ບັນທຶກການແກ້ໄຂ"
+                    : "ເພີ່ມສິນຄ້າ"}
               </Button>
             </div>
           </motion.div>
@@ -573,7 +821,7 @@ export default function AdminProductsPage() {
           className="fixed bottom-6 right-6 bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2"
         >
           <Check className="h-5 w-5" />
-          ເພີ່ມສິນຄ້າສຳເລັດ!
+          {saveMessage}
         </motion.div>
       )}
     </div>
