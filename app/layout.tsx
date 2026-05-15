@@ -3,8 +3,7 @@ import { Geist, Geist_Mono, Noto_Sans_Lao } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { StoreProvider } from '@/lib/store'
 import { AuthProvider } from '@/lib/auth'
-import { Header } from '@/components/layout/header'
-import { Footer } from '@/components/layout/footer'
+import { ShopChrome } from '@/components/layout/shop-chrome'
 import './globals.css'
 
 const geist = Geist({ 
@@ -64,11 +63,7 @@ export default function RootLayout({
       <body className="font-sans antialiased min-h-screen flex flex-col">
         <StoreProvider>
           <AuthProvider>
-            <Header />
-            <main className="flex-1">
-              {children}
-            </main>
-            <Footer />
+            <ShopChrome>{children}</ShopChrome>
           </AuthProvider>
         </StoreProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}

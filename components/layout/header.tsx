@@ -170,15 +170,6 @@ export function Header() {
                   ລູກຄ້າ
                 </span>
               </Link>
-              <Link
-                href="/admin/login"
-                className="p-2 hover:text-amber-600 transition-colors hidden sm:flex sm:items-center sm:gap-1.5 rounded-md text-muted-foreground"
-                title="ເຂົ້າແອັດມິນ"
-              >
-                <span className="text-xs font-semibold uppercase tracking-wide">
-                  Admin
-                </span>
-              </Link>
               <Link href="/wishlist" className="p-2 hover:text-primary transition-colors hidden sm:block">
                 <Heart className="h-5 w-5" />
               </Link>
@@ -272,13 +263,6 @@ export function Header() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     ເຂົ້າລະບົບລູກຄ້າ
-                  </Link>
-                  <Link
-                    href="/admin/login"
-                    className="block py-2 font-medium text-amber-700 dark:text-amber-500"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    ເຂົ້າແອັດມິນ
                   </Link>
                 </nav>
               </div>

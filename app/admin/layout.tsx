@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,35 @@ function AuthGateShell({ message }: { message: string }) {
   );
 }
 
+function SidebarLogoutBlock({ onLogout }: { onLogout: () => void }) {
+  const { adminUser } = useAuth();
+  return (
+    <div className="mt-2 border-t border-border pt-2">
+      <Button
+        variant="outline"
+        className="w-full justify-start gap-2 text-destructive hover:text-destructive"
+        onClick={onLogout}
+      >
+        <LogOut className="h-4 w-4 shrink-0" />
+        ອອກຈາກລະບົບ
+      </Button>
+      <div className="mt-3 border-t border-b border-border py-2.5">
+        <p className="text-sm text-muted-foreground px-1">
+          ຜູ້ໃຊ້:{" "}
+          <span className="font-medium text-foreground">
+            {adminUser
+              ? String(adminUser.username ?? adminUser.id ?? "—")
+              : "…"}
+          </span>
+          {adminUser?.role != null && (
+            <span className="ml-2 text-xs">({String(adminUser.role)})</span>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminLayout({
   children,
 }: {
@@ -43,7 +72,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { adminUser, adminToken, isReady, logoutAdmin } = useAuth();
+  const { adminToken, isReady, logoutAdmin } = useAuth();
 
   const isLoginRoute = pathname === "/admin/login";
   const requiresAuth = !isLoginRoute;
@@ -76,7 +105,7 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="flex min-h-screen flex-1 flex-col bg-muted/30 w-full">
       {/* Mobile Header */}
       <header className="lg:hidden sticky top-0 z-40 bg-background border-b border-border">
         <div className="flex items-center justify-between h-16 px-4">
@@ -84,16 +113,7 @@ export default function AdminLayout({
             <Menu className="h-6 w-6" />
           </button>
           <span className="font-bold">ແອັດມິນ</span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={handleLogout}
-            aria-label="ອອກຈາກລະບົບ"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="text-xs font-medium">ອອກ</span>
-          </Button>
+          <div className="w-10 shrink-0" aria-hidden />
         </div>
       </header>
 
@@ -127,30 +147,34 @@ export default function AdminLayout({
               </div>
               <nav className="flex-1 overflow-y-auto p-4 space-y-1">
                 {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setIsSidebarOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                      pathname === item.href
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    {item.label}
-                  </Link>
+                  <Fragment key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={() => setIsSidebarOpen(false)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                        pathname === item.href
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      {item.label}
+                    </Link>
+                    {item.href === "/admin/settings" && (
+                      <SidebarLogoutBlock onLogout={handleLogout} />
+                    )}
+                  </Fragment>
                 ))}
               </nav>
-              <div className="border-t border-border p-4 mt-auto">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start gap-2 text-destructive hover:text-destructive"
-                  onClick={handleLogout}
+              <div className="mt-auto border-t border-border p-4">
+                <Link
+                  href="/"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => setIsSidebarOpen(false)}
                 >
-                  <LogOut className="h-4 w-4 shrink-0" />
-                  ອອກຈາກລະບົບ
-                </Button>
+                  <ChevronRight className="h-4 w-4 rotate-180 shrink-0" />
+                  ກັບຄືນໜ້າຮ້ານ
+                </Link>
               </div>
             </motion.aside>
           </>
@@ -170,34 +194,30 @@ export default function AdminLayout({
           </div>
           <nav className="flex-1 p-4 space-y-1">
             {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  pathname === item.href
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <item.icon className="h-5 w-5" />
-                {item.label}
-              </Link>
+              <Fragment key={item.href}>
+                <Link
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                    pathname === item.href
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+                </Link>
+                {item.href === "/admin/settings" && (
+                  <SidebarLogoutBlock onLogout={handleLogout} />
+                )}
+              </Fragment>
             ))}
           </nav>
-          <div className="p-4 border-t border-border space-y-2">
-            <Button
-              variant="outline"
-              className="w-full justify-start gap-2 text-destructive hover:text-destructive"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4 shrink-0" />
-              ອອກຈາກລະບົບ
-            </Button>
+          <div className="mt-auto border-t border-border p-4">
             <Link
               href="/"
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+              className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <ChevronRight className="h-4 w-4 rotate-180" />
+              <ChevronRight className="h-4 w-4 rotate-180 shrink-0" />
               ກັບຄືນໜ້າຮ້ານ
             </Link>
           </div>
@@ -205,28 +225,6 @@ export default function AdminLayout({
 
         {/* Main Content */}
         <main className="flex-1 min-h-screen">
-          <div className="border-b border-border bg-card px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              ຜູ້ໃຊ້:{" "}
-              <span className="font-medium text-foreground">
-                {adminUser
-                  ? String(adminUser.username ?? adminUser.id ?? "—")
-                  : "…"}
-              </span>
-              {adminUser?.role != null && (
-                <span className="ml-2 text-xs">({String(adminUser.role)})</span>
-              )}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4" />
-              ອອກຈາກລະບົບ
-            </Button>
-          </div>
           <div className="p-6">{children}</div>
         </main>
       </div>
