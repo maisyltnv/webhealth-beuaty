@@ -22,6 +22,7 @@ import { formatLAK, formatDateLao } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import {
   apiListOrders,
+  apiUpdateOrderStatus,
   getStoredAccessToken,
   getStoredAdminAccessToken,
   isApiConfigured,
@@ -48,6 +49,14 @@ const statusConfig: Record<
 
 function orderItemCount(order: Order): number {
   return order.items.reduce((sum, i) => sum + i.quantity, 0);
+}
+
+function resolveOrderApiId(order: Order): number | null {
+  if (order.apiId != null && !Number.isNaN(order.apiId)) return order.apiId;
+  const ordMatch = order.id.match(/^ORD-0*(\d+)$/i);
+  if (ordMatch) return parseInt(ordMatch[1], 10);
+  if (/^\d+$/.test(order.id)) return parseInt(order.id, 10);
+  return null;
 }
 
 function hasOrdersBearer(): boolean {
@@ -78,6 +87,8 @@ export default function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [ordersLoadError, setOrdersLoadError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const loadOrders = useCallback(async () => {
@@ -129,13 +140,58 @@ export default function AdminOrdersPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleStatusChange = (orderId: string, newStatus: Order["status"]) => {
+  const applyStatusLocally = (orderId: string, newStatus: Order["status"]) => {
     updateOrderStatus(orderId, newStatus);
     setLocalOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
-    if (selectedOrder?.id === orderId) {
-      setSelectedOrder({ ...selectedOrder, status: newStatus });
+    setSelectedOrder((prev) =>
+      prev?.id === orderId ? { ...prev, status: newStatus } : prev
+    );
+  };
+
+  const handleStatusChange = async (
+    order: Order,
+    newStatus: Order["status"]
+  ) => {
+    if (order.status === newStatus) return;
+
+    const apiId = resolveOrderApiId(order);
+    if (!apiId) {
+      setStatusError("ບໍ່ພົບ order id ສຳລັບ API (ຕ້ອງມີ apiId ຫຼື ORD-00000001)");
+      return;
+    }
+
+    if (!getStoredAdminAccessToken()) {
+      setStatusError("ຕ້ອງເຂົ້າ /admin/login ເພື່ອອັບເດດສະຖານະ (PUT /orders/:id/status)");
+      return;
+    }
+
+    setStatusUpdatingId(order.id);
+    setStatusError(null);
+
+    try {
+      if (isApiConfigured()) {
+        const updated = await apiUpdateOrderStatus(apiId, newStatus);
+        const mapped = apiOrderToStoreOrder(updated);
+        setLocalOrders((prev) =>
+          prev.map((o) => (o.id === order.id ? { ...o, ...mapped, id: order.id } : o))
+        );
+        setSelectedOrder((prev) =>
+          prev?.id === order.id
+            ? { ...prev, ...mapped, id: order.id, status: newStatus }
+            : prev
+        );
+        updateOrderStatus(order.id, newStatus);
+      } else {
+        applyStatusLocally(order.id, newStatus);
+      }
+    } catch (err) {
+      setStatusError(
+        `ອັບເດດສະຖານະບໍ່ສຳເລັດ: ${formatOrdersApiError(err)}`
+      );
+    } finally {
+      setStatusUpdatingId(null);
     }
   };
 
@@ -340,10 +396,12 @@ export default function AdminOrdersPage() {
                       <button
                         key={status}
                         type="button"
-                        onClick={() =>
-                          handleStatusChange(selectedOrder.id, status)
+                        disabled={
+                          statusUpdatingId === selectedOrder.id ||
+                          selectedOrder.status === status
                         }
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                        onClick={() => void handleStatusChange(selectedOrder, status)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 disabled:opacity-60 ${
                           selectedOrder.status === status
                             ? config.color === "orange"
                               ? "bg-orange-500 text-white"
@@ -361,9 +419,22 @@ export default function AdminOrdersPage() {
                     );
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  ອັບເດດສະຖານະໃນແອັບເທົ່ານັ້ນ (ຍັງບໍ່ sync ກັບ API)
-                </p>
+                {statusUpdatingId === selectedOrder.id && (
+                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    ກຳລັງອັບເດດສະຖານະ...
+                  </p>
+                )}
+                {statusError && (
+                  <p className="text-xs text-destructive mt-2 rounded-lg bg-destructive/10 px-2 py-1.5">
+                    {statusError}
+                  </p>
+                )}
+                {!statusError && statusUpdatingId !== selectedOrder.id && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    ອັບເດດຜ່ານ PUT /orders/:id/status
+                  </p>
+                )}
               </div>
 
               <motion.div className="bg-muted/50 rounded-xl p-4">

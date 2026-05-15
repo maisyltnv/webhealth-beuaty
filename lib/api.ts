@@ -13,6 +13,8 @@ import type {
   ApiOrder,
   ApiOrderListResponse,
   ApiOrdersByPhoneResponse,
+  ApiOrderStatus,
+  ApiUpdateOrderStatusBody,
   ApiShippingConfig,
   ApiShippingQuote,
   ApiProduct,
@@ -394,6 +396,19 @@ export async function apiLookupOrdersByPhone(
 /** Bearer JWT (admin or customer) — GET /orders/:id */
 export async function apiGetOrder(id: number | string): Promise<ApiOrder> {
   const { data } = await ordersClient.get<ApiOrder>(`/orders/${id}`);
+  return data;
+}
+
+/** Admin JWT — PUT /orders/:id/status */
+export async function apiUpdateOrderStatus(
+  id: number | string,
+  status: ApiOrderStatus
+): Promise<ApiOrder> {
+  const body: ApiUpdateOrderStatusBody = { status };
+  const { data } = await adminClient.put<ApiOrder>(
+    `/orders/${id}/status`,
+    body
+  );
   return data;
 }
 

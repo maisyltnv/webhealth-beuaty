@@ -150,6 +150,17 @@ export interface ApiOrderListResponse {
 }
 
 /** GET /ordersbyphone — paginated */
+/** PUT /orders/:id/status — admin JWT */
+export type ApiOrderStatus =
+  | "pending"
+  | "processing"
+  | "shipped"
+  | "delivered";
+
+export interface ApiUpdateOrderStatusBody {
+  status: ApiOrderStatus;
+}
+
 export interface ApiOrdersByPhoneResponse {
   items: ApiOrder[];
   page: number;
