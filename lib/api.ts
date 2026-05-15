@@ -6,7 +6,10 @@ import type {
   ApiCreateCategoryBody,
   ApiCreateOrderBody,
   ApiCreateProductBody,
+  ApiExchangeRate,
   ApiLoginResponse,
+  ApiUpdateExchangeRateBody,
+  ApiUpdateExchangeRateResponse,
   ApiOrder,
   ApiOrderListResponse,
   ApiProduct,
@@ -229,6 +232,23 @@ export async function apiCreateOrder(
   body: ApiCreateOrderBody
 ): Promise<ApiOrder> {
   const { data } = await userClient.post<ApiOrder>("/orders", body);
+  return data;
+}
+
+/** Public — GET /exchange-rate */
+export async function apiGetExchangeRate(): Promise<ApiExchangeRate> {
+  const { data } = await publicClient.get<ApiExchangeRate>("/exchange-rate");
+  return data;
+}
+
+/** Admin JWT — PUT /exchange-rate (recalculates all product prices on backend) */
+export async function apiUpdateExchangeRate(
+  body: ApiUpdateExchangeRateBody
+): Promise<ApiUpdateExchangeRateResponse> {
+  const { data } = await adminClient.put<ApiUpdateExchangeRateResponse>(
+    "/exchange-rate",
+    body
+  );
   return data;
 }
 

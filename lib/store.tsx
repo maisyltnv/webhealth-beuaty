@@ -8,7 +8,11 @@ import {
   useCallback,
   useEffect,
 } from "react";
-import { apiListProducts, isApiConfigured } from "@/lib/api";
+import {
+  apiGetExchangeRate,
+  apiListProducts,
+  isApiConfigured,
+} from "@/lib/api";
 import { apiProductToStoreProduct } from "@/lib/map-api-product";
 
 export interface Product {
@@ -65,6 +69,7 @@ interface StoreContextType {
   // Exchange Rate
   exchangeRate: number;
   setExchangeRate: (rate: number) => void;
+  refreshExchangeRate: () => Promise<void>;
   
   // Products
   products: Product[];
@@ -228,6 +233,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [productsError, setProductsError] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
 
+  const refreshExchangeRate = useCallback(async () => {
+    if (!isApiConfigured()) return;
+    try {
+      const data = await apiGetExchangeRate();
+      if (
+        typeof data.rate_lak_per_cny === "number" &&
+        data.rate_lak_per_cny > 0
+      ) {
+        setExchangeRate(data.rate_lak_per_cny);
+      }
+    } catch {
+      /* keep current rate */
+    }
+  }, []);
+
   const refreshProducts = useCallback(async () => {
     if (!isApiConfigured()) {
       setProducts(mockProducts);
@@ -262,8 +282,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    void refreshExchangeRate();
     void refreshProducts();
-  }, [refreshProducts]);
+  }, [refreshExchangeRate, refreshProducts]);
 
   const addToCart = useCallback((product: Product, quantity = 1) => {
     setCart((prev) => {
@@ -336,6 +357,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         cartCount,
         exchangeRate,
         setExchangeRate,
+        refreshExchangeRate,
         products,
         productsLoading,
         productsError,

@@ -111,3 +111,28 @@ export interface ApiCreateCategoryBody {
 }
 
 export type ApiUpdateCategoryBody = Partial<ApiCreateCategoryBody>;
+
+export interface ApiExchangeRateExample {
+  cny: number;
+  lak: number;
+}
+
+/** GET /exchange-rate */
+export interface ApiExchangeRate {
+  rate_lak_per_cny: number;
+  products_count?: number;
+  updated_at?: string;
+  examples?: ApiExchangeRateExample[];
+}
+
+/** PUT /exchange-rate */
+export interface ApiUpdateExchangeRateBody {
+  rate_lak_per_cny: number;
+}
+
+/** PUT /exchange-rate response */
+export interface ApiUpdateExchangeRateResponse {
+  rate_lak_per_cny: number;
+  products_updated: number;
+  updated_at: string;
+}
