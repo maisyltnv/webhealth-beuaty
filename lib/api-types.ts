@@ -23,6 +23,13 @@ export interface ApiLoginResponse {
   access_token: string;
 }
 
+/** Response from POST /auth/admin/login */
+export interface ApiAdminLoginResponse {
+  access_token: string;
+  expires_at?: string;
+  user?: ApiUser;
+}
+
 export interface ApiUser {
   username?: string;
   role?: string;

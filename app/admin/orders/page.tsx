@@ -41,14 +41,14 @@ const statusConfig: Record<
 
 export default function AdminOrdersPage() {
   const { orders, updateOrderStatus, setOrders } = useStore();
-  const { token, isReady } = useAuth();
+  const { adminToken, isReady } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [ordersLoadError, setOrdersLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isReady || !token || !isApiConfigured()) return;
+    if (!isReady || !adminToken || !isApiConfigured()) return;
     let cancelled = false;
     (async () => {
       try {
@@ -65,7 +65,7 @@ export default function AdminOrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [isReady, token, setOrders]);
+  }, [isReady, adminToken, setOrders]);
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =

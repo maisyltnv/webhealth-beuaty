@@ -43,20 +43,20 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { user, token, isReady, logout } = useAuth();
+  const { adminUser, adminToken, isReady, logoutAdmin } = useAuth();
 
   const isLoginRoute = pathname === "/admin/login";
   const requiresAuth = !isLoginRoute;
 
   useEffect(() => {
     if (!isReady || !requiresAuth) return;
-    if (!token) {
+    if (!adminToken) {
       router.replace("/admin/login");
     }
-  }, [isReady, requiresAuth, token, router]);
+  }, [isReady, requiresAuth, adminToken, router]);
 
   const handleLogout = () => {
-    logout();
+    logoutAdmin();
     setIsSidebarOpen(false);
     router.push("/admin/login");
   };
@@ -69,9 +69,9 @@ export default function AdminLayout({
     return <AuthGateShell message="ກຳລັງໂຫຼດ..." />;
   }
 
-  if (!token) {
+  if (!adminToken) {
     return (
-      <AuthGateShell message="ຕ້ອງເຂົ້າລະບົບກ່ອນ — ກຳລັງໄປໜ້າເຂົ້າລະບົບແອັດມິນ..." />
+      <AuthGateShell message="ຕ້ອງເຂົ້າລະບົບແອັດມິນກ່ອນ — ກຳລັງໄປໜ້າເຂົ້າລະບົບ..." />
     );
   }
 
@@ -209,12 +209,12 @@ export default function AdminLayout({
             <p className="text-sm text-muted-foreground">
               ຜູ້ໃຊ້:{" "}
               <span className="font-medium text-foreground">
-                {user
-                  ? String(user.username ?? user.id ?? "—")
+                {adminUser
+                  ? String(adminUser.username ?? adminUser.id ?? "—")
                   : "…"}
               </span>
-              {user?.role != null && (
-                <span className="ml-2 text-xs">({String(user.role)})</span>
+              {adminUser?.role != null && (
+                <span className="ml-2 text-xs">({String(adminUser.role)})</span>
               )}
             </p>
             <Button

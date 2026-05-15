@@ -18,7 +18,7 @@ export interface LoginScreenProps {
   brandSubtitle: string;
   redirectIfAuthed: string;
   redirectAfterAuth: string;
-  /** Passed to POST /auth/register when ລົງທະບຽນ (optional). */
+  /** Customer register only — POST /auth/register */
   registerRole?: string;
   alternateHint: {
     href: string;
@@ -38,7 +38,14 @@ export function LoginScreen({
   alternateHint,
 }: LoginScreenProps) {
   const router = useRouter();
-  const { login, register, token, isReady } = useAuth();
+  const {
+    login,
+    register,
+    loginAdmin,
+    token,
+    adminToken,
+    isReady,
+  } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -46,10 +53,11 @@ export function LoginScreen({
   const [loading, setLoading] = useState(false);
 
   const isAdmin = portal === "admin";
+  const sessionToken = isAdmin ? adminToken : token;
 
   useEffect(() => {
-    if (token) router.replace(redirectIfAuthed);
-  }, [token, router, redirectIfAuthed]);
+    if (sessionToken) router.replace(redirectIfAuthed);
+  }, [sessionToken, router, redirectIfAuthed]);
 
   if (!isReady) {
     return (
@@ -64,7 +72,9 @@ export function LoginScreen({
     setError(null);
     setLoading(true);
     try {
-      if (mode === "login") {
+      if (isAdmin) {
+        await loginAdmin(username.trim(), password);
+      } else if (mode === "login") {
         await login(username.trim(), password);
       } else {
         await register(username.trim(), password, registerRole);
@@ -72,7 +82,7 @@ export function LoginScreen({
       router.push(redirectAfterAuth);
     } catch {
       setError(
-        mode === "login"
+        isAdmin || mode === "login"
           ? "ເຂົ້າລະບົບບໍ່ສຳເລັດ — ກວດຊື່ຜູ້ໃຊ້ ແລະ ລະຫັດ"
           : "ລົງທະບຽນບໍ່ສຳເລັດ — ອາດມີຊື່ນີ້ແລ້ວ"
       );
@@ -114,7 +124,7 @@ export function LoginScreen({
                 isAdmin ? "text-amber-400/90" : "text-primary"
               )}
             >
-              {isAdmin ? "Admin portal" : "ຮ້ານອອນລາຍ"}
+              {isAdmin ? "Admin — /auth/admin/login" : "ຮ້ານອອນລາຍ — /auth/login"}
             </p>
             <h1 className="text-xl font-bold">{brandTitle}</h1>
             <p
@@ -128,51 +138,45 @@ export function LoginScreen({
           </div>
         </div>
 
-        <div
-          className={cn(
-            "mb-6 flex rounded-lg p-1",
-            isAdmin ? "bg-slate-800" : "bg-muted"
-          )}
-        >
-          <button
-            type="button"
+        {!isAdmin && (
+          <div
             className={cn(
-              "flex-1 rounded-md py-2 text-sm font-medium transition-colors",
-              mode === "login"
-                ? isAdmin
-                  ? "bg-slate-700 text-white shadow"
-                  : "bg-background text-foreground shadow"
-                : isAdmin
-                  ? "text-slate-400"
-                  : "text-muted-foreground"
+              "mb-6 flex rounded-lg p-1",
+              "bg-muted"
             )}
-            onClick={() => {
-              setMode("login");
-              setError(null);
-            }}
           >
-            ເຂົ້າລະບົບ
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex-1 rounded-md py-2 text-sm font-medium transition-colors",
-              mode === "register"
-                ? isAdmin
-                  ? "bg-slate-700 text-white shadow"
-                  : "bg-background text-foreground shadow"
-                : isAdmin
-                  ? "text-slate-400"
+            <button
+              type="button"
+              className={cn(
+                "flex-1 rounded-md py-2 text-sm font-medium transition-colors",
+                mode === "login"
+                  ? "bg-background text-foreground shadow"
                   : "text-muted-foreground"
-            )}
-            onClick={() => {
-              setMode("register");
-              setError(null);
-            }}
-          >
-            ລົງທະບຽນ
-          </button>
-        </div>
+              )}
+              onClick={() => {
+                setMode("login");
+                setError(null);
+              }}
+            >
+              ເຂົ້າລະບົບ
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex-1 rounded-md py-2 text-sm font-medium transition-colors",
+                mode === "register"
+                  ? "bg-background text-foreground shadow"
+                  : "text-muted-foreground"
+              )}
+              onClick={() => {
+                setMode("register");
+                setError(null);
+              }}
+            >
+              ລົງທະບຽນ
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -189,7 +193,7 @@ export function LoginScreen({
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              placeholder={isAdmin ? "ບັນຊີແອັດມິນ" : "ເບີ ຫຼື ຊື່ຜູ້ໃຊ້"}
+              placeholder={isAdmin ? "admin" : "ເບີ ຫຼື ຊື່ຜູ້ໃຊ້"}
               className={cn(isAdmin && "border-slate-600 bg-slate-800 text-slate-50")}
             />
           </div>
@@ -205,7 +209,9 @@ export function LoginScreen({
             <Input
               type="password"
               autoComplete={
-                mode === "login" ? "current-password" : "new-password"
+                mode === "login" || isAdmin
+                  ? "current-password"
+                  : "new-password"
               }
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -230,13 +236,16 @@ export function LoginScreen({
 
           <Button
             type="submit"
-            className={cn("w-full", isAdmin && "bg-amber-500 text-slate-950 hover:bg-amber-400")}
+            className={cn(
+              "w-full",
+              isAdmin && "bg-amber-500 text-slate-950 hover:bg-amber-400"
+            )}
             size="lg"
             disabled={loading}
           >
             {loading
               ? "ກຳລັງດຳເນີນການ..."
-              : mode === "login"
+              : isAdmin || mode === "login"
                 ? "ເຂົ້າລະບົບ"
                 : "ສ້າງບັນຊີ"}
           </Button>

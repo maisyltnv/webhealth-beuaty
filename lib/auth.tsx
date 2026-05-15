@@ -11,12 +11,18 @@ import {
 } from "react";
 import type { ApiUser } from "@/lib/api-types";
 import {
+  apiAdminLogin,
   apiLogin,
   apiMe,
+  apiMeAdmin,
   apiRegister,
   getStoredAccessToken,
+  getStoredAdminAccessToken,
   setStoredAccessToken,
+  setStoredAdminAccessToken,
 } from "@/lib/api";
+
+const ADMIN_USER_STORAGE_KEY = "hb_admin_user";
 
 interface AuthContextValue {
   user: ApiUser | null;
@@ -30,17 +36,45 @@ interface AuthContextValue {
   ) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+
+  adminUser: ApiUser | null;
+  adminToken: string | null;
+  loginAdmin: (username: string, password: string) => Promise<void>;
+  logoutAdmin: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function readAdminUserFromStorage(): ApiUser | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(ADMIN_USER_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ApiUser;
+  } catch {
+    return null;
+  }
+}
+
+function writeAdminUserToStorage(user: ApiUser | null) {
+  if (typeof window === "undefined") return;
+  if (user) localStorage.setItem(ADMIN_USER_STORAGE_KEY, JSON.stringify(user));
+  else localStorage.removeItem(ADMIN_USER_STORAGE_KEY);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<ApiUser | null>(null);
+
+  const [adminToken, setAdminToken] = useState<string | null>(null);
+  const [adminUser, setAdminUser] = useState<ApiUser | null>(null);
+
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     setToken(getStoredAccessToken());
+    setAdminToken(getStoredAdminAccessToken());
+    setAdminUser(readAdminUserFromStorage());
     setIsReady(true);
   }, []);
 
@@ -88,6 +122,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const loginAdmin = useCallback(async (username: string, password: string) => {
+    const res = await apiAdminLogin({ username, password });
+    setStoredAdminAccessToken(res.access_token);
+    setAdminToken(res.access_token);
+    const nextUser = res.user ?? (await apiMeAdmin());
+    setAdminUser(nextUser);
+    writeAdminUserToStorage(nextUser);
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    if (!adminToken) {
+      setAdminUser(null);
+      writeAdminUserToStorage(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await apiMeAdmin();
+        if (!cancelled) {
+          setAdminUser(me);
+          writeAdminUserToStorage(me);
+        }
+      } catch {
+        if (!cancelled) {
+          setStoredAdminAccessToken(null);
+          setAdminToken(null);
+          setAdminUser(null);
+          writeAdminUserToStorage(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isReady, adminToken]);
+
+  const logoutAdmin = useCallback(() => {
+    setStoredAdminAccessToken(null);
+    setAdminToken(null);
+    setAdminUser(null);
+    writeAdminUserToStorage(null);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -97,8 +176,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       refreshUser,
+      adminUser,
+      adminToken,
+      loginAdmin,
+      logoutAdmin,
     }),
-    [user, token, isReady, login, register, logout, refreshUser]
+    [
+      user,
+      token,
+      isReady,
+      login,
+      register,
+      logout,
+      refreshUser,
+      adminUser,
+      adminToken,
+      loginAdmin,
+      logoutAdmin,
+    ]
   );
 
   return (

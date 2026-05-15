@@ -37,7 +37,7 @@ const categories = [
 
 export default function AdminProductsPage() {
   const { products, setProducts, exchangeRate, refreshProducts } = useStore();
-  const { token } = useAuth();
+  const { adminToken } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -121,9 +121,9 @@ export default function AdminProductsPage() {
       });
     };
 
-    if (!isApiConfigured() || !token) {
+    if (!isApiConfigured() || !adminToken) {
       finishLocal();
-      if (isApiConfigured() && !token) {
+      if (isApiConfigured() && !adminToken) {
         setApiError(
           "ບໍ່ມີ JWT — ບັນທຶກແບບທ້ອງຖິ່ນເທົ່ານັ້ນ. ໄປ /admin/login ເພື່ອ sync ກັບ API"
         );
@@ -176,7 +176,7 @@ export default function AdminProductsPage() {
   const handleDeleteProduct = async (id: string) => {
     if (!confirm("ລຶບສິນຄ້ານີ້ບໍ?")) return;
     setApiError(null);
-    if (token && isApiConfigured()) {
+    if (adminToken && isApiConfigured()) {
       setPendingAction(true);
       try {
         await apiDeleteProduct(id);
