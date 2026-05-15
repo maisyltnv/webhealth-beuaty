@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard,
   Package,
+  FolderTree,
   ShoppingCart,
   DollarSign,
   Settings,
@@ -22,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 const navItems = [
   { href: "/admin", label: "ແດັສບອດ", icon: LayoutDashboard },
   { href: "/admin/products", label: "ສິນຄ້າ", icon: Package },
+  { href: "/admin/categories", label: "ໝວດໝູ່", icon: FolderTree },
   { href: "/admin/orders", label: "ຄຳສັ່ງຊື້", icon: ShoppingCart },
   { href: "/admin/currency", label: "ອັດຕາແລກປ່ຽນ", icon: DollarSign },
   { href: "/admin/settings", label: "ຕັ້ງຄ່າ", icon: Settings },

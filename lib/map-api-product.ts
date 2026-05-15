@@ -4,25 +4,6 @@ import type { Product } from "@/lib/store";
 const PLACEHOLDER_IMG =
   "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop";
 
-const CATEGORY_SLUGS: { slug: string; lao: string }[] = [
-  { slug: "supplements", lao: "ອາຫານເສີມ" },
-  { slug: "skincare", lao: "ດູແລຜິວໜັງ" },
-  { slug: "vitamins", lao: "ວິຕາມິນ" },
-  { slug: "beauty", lao: "ຄວາມງາມ" },
-];
-
-export function laoCategoryToSlug(category: string): string {
-  const c = category.trim();
-  for (const row of CATEGORY_SLUGS) {
-    if (c.includes(row.lao) || row.lao.includes(c)) return row.slug;
-  }
-  return "supplements";
-}
-
-export function slugToCategoryLao(slug: string): string {
-  return CATEGORY_SLUGS.find((r) => r.slug === slug)?.lao ?? "ອາຫານເສີມ";
-}
-
 /** Backend profit_margin is often a ratio (e.g. 0.1 = 10%). */
 export function profitMarginToPercent(value: number): number {
   if (value <= 1 && value >= 0) return Math.round(value * 100);
@@ -33,25 +14,40 @@ export function marginPercentToRatio(percent: number): number {
   return percent / 100;
 }
 
+function inferredFinalPriceLak(api: ApiProduct): number {
+  const { original_price_cny, exchange_rate, profit_margin } = api;
+  return Math.round(original_price_cny * exchange_rate * (1 + profit_margin));
+}
+
 export function apiProductToStoreProduct(api: ApiProduct): Product {
   const img = api.image_url?.trim() ? api.image_url : PLACEHOLDER_IMG;
-  const slug = laoCategoryToSlug(api.category);
+  const nested = api.category;
+  const slug =
+    nested?.slug?.trim() ||
+    (api.category_id != null ? `category-${api.category_id}` : "uncategorized");
+  const categoryLao =
+    nested?.name?.trim() ||
+    (api.category_id != null ? `ໝວດ #${api.category_id}` : "—");
   const marginPct = profitMarginToPercent(api.profit_margin);
+  const priceLak =
+    typeof api.final_price_lak === "number" && !Number.isNaN(api.final_price_lak)
+      ? Math.round(api.final_price_lak)
+      : inferredFinalPriceLak(api);
 
   return {
     id: String(api.id),
     name: api.name,
     nameLao: api.name,
-    description: api.description,
-    descriptionLao: api.description,
+    description: api.description ?? "",
+    descriptionLao: api.description ?? "",
     howToUse: "",
     howToUseLao: "",
     priceCNY: api.original_price_cny,
-    priceLAK: Math.round(api.final_price_lak),
+    priceLAK: priceLak,
     marginPercent: marginPct,
     images: [img],
     category: slug,
-    categoryLao: api.category || slugToCategoryLao(slug),
+    categoryLao,
     stock: 999,
     sourceUrl: api.source_url ?? "",
     trustBadges: ["ຂອງແທ້ 100%"],

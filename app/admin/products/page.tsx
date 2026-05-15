@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Plus,
@@ -21,19 +21,11 @@ import { useAuth } from "@/lib/auth";
 import {
   apiCreateProduct,
   apiDeleteProduct,
+  apiListCategories,
   isApiConfigured,
 } from "@/lib/api";
-import {
-  marginPercentToRatio,
-  slugToCategoryLao,
-} from "@/lib/map-api-product";
-
-const categories = [
-  { id: "supplements", nameLao: "ອາຫານເສີມ" },
-  { id: "skincare", nameLao: "ດູແລຜິວໜັງ" },
-  { id: "vitamins", nameLao: "ວິຕາມິນ" },
-  { id: "beauty", nameLao: "ຄວາມງາມ" },
-];
+import type { ApiCategory } from "@/lib/api-types";
+import { marginPercentToRatio } from "@/lib/map-api-product";
 
 export default function AdminProductsPage() {
   const { products, setProducts, exchangeRate, refreshProducts } = useStore();
@@ -44,6 +36,10 @@ export default function AdminProductsPage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState(false);
 
+  const [apiCategories, setApiCategories] = useState<ApiCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+
   const [newProduct, setNewProduct] = useState({
     name: "",
     nameLao: "",
@@ -53,11 +49,46 @@ export default function AdminProductsPage() {
     howToUseLao: "",
     priceCNY: "",
     marginPercent: "50",
-    category: "supplements",
+    /** ຄ່າເລືອກ = ApiCategory.id (string) */
+    category: "",
     stock: "50",
     sourceUrl: "",
     imageUrl: "",
   });
+
+  const loadCategories = useCallback(async () => {
+    if (!isApiConfigured()) {
+      setApiCategories([]);
+      setCategoriesError("ບໍ່ມີ NEXT_PUBLIC_API_URL");
+      return;
+    }
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    try {
+      let list = await apiListCategories({ roots_only: true });
+      if (list.length === 0) {
+        list = await apiListCategories();
+      }
+      const active = list.filter((c) => c.is_active !== false);
+      setApiCategories(active);
+      setNewProduct((prev) => {
+        if (active.some((c) => String(c.id) === prev.category)) return prev;
+        return {
+          ...prev,
+          category: active[0] ? String(active[0].id) : "",
+        };
+      });
+    } catch {
+      setCategoriesError("ໂຫຼດໝວດໝູ່ບໍ່ສຳເລັດ");
+      setApiCategories([]);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCategories();
+  }, [loadCategories]);
 
   const filteredProducts = products.filter(
     (p) =>
@@ -73,11 +104,13 @@ export default function AdminProductsPage() {
 
     if (isNaN(priceCNY) || isNaN(marginPercent) || isNaN(stock)) return;
 
-    const category = categories.find((c) => c.id === newProduct.category);
-    const categoryLao = category?.nameLao ?? slugToCategoryLao(newProduct.category);
+    const selectedCat = apiCategories.find(
+      (c) => String(c.id) === newProduct.category
+    );
+    const storeSlug = selectedCat?.slug ?? "uncategorized";
+    const storeNameLao = selectedCat?.name ?? "ສິນຄ້າ";
 
     const finishLocal = () => {
-      const cat = categories.find((c) => c.id === newProduct.category);
       const product: Product = {
         id: Date.now().toString(),
         name: newProduct.name,
@@ -93,8 +126,8 @@ export default function AdminProductsPage() {
           newProduct.imageUrl ||
             "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop",
         ],
-        category: cat?.id || "supplements",
-        categoryLao: cat?.nameLao || "ອາຫານເສີມ",
+        category: storeSlug,
+        categoryLao: storeNameLao,
         stock,
         sourceUrl: newProduct.sourceUrl,
         trustBadges: ["ຂອງແທ້ 100%", "ນຳເຂົ້າໂດຍກົງ"],
@@ -114,7 +147,7 @@ export default function AdminProductsPage() {
         howToUseLao: "",
         priceCNY: "",
         marginPercent: "50",
-        category: "supplements",
+        category: apiCategories[0] ? String(apiCategories[0].id) : "",
         stock: "50",
         sourceUrl: "",
         imageUrl: "",
@@ -131,22 +164,36 @@ export default function AdminProductsPage() {
       return;
     }
 
+    if (categoriesLoading) {
+      setApiError("ກຳລັງໂຫຼດໝວດໝູ່ — ລໍຖ້າຊົ່ວຄາວ");
+      return;
+    }
+
+    if (apiCategories.length === 0) {
+      setApiError(
+        "ບໍ່ມີໝວດໝູ່ຈາກ API — ສ້າງໝວດໝູ່ທີ່ /admin/categories ກ່ອນເພີ່ມສິນຄ້າ"
+      );
+      return;
+    }
+
+    if (!selectedCat) {
+      setApiError("ເລືອກໝວດໝູ່");
+      return;
+    }
+
     setPendingAction(true);
     try {
       await apiCreateProduct({
         name: newProduct.nameLao || newProduct.name || "ສິນຄ້າ",
+        category_id: selectedCat.id,
+        original_price_cny: priceCNY,
+        exchange_rate: exchangeRate,
+        profit_margin: marginPercentToRatio(marginPercent),
         description: newProduct.descriptionLao || newProduct.description || "",
         image_url:
           newProduct.imageUrl.trim() ||
           "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop",
-        category: categoryLao,
-        original_price_cny: priceCNY,
-        exchange_rate: exchangeRate,
-        profit_margin: marginPercentToRatio(marginPercent),
-        final_price_lak: Math.round(
-          calculateSellingPrice(priceCNY, marginPercent, exchangeRate)
-        ),
-        source_url: newProduct.sourceUrl || "https://example.com",
+        source_url: newProduct.sourceUrl.trim() || "https://example.com",
       });
       await refreshProducts();
       setIsModalOpen(false);
@@ -161,7 +208,7 @@ export default function AdminProductsPage() {
         howToUseLao: "",
         priceCNY: "",
         marginPercent: "50",
-        category: "supplements",
+        category: apiCategories[0] ? String(apiCategories[0].id) : "",
         stock: "50",
         sourceUrl: "",
         imageUrl: "",
@@ -425,14 +472,27 @@ export default function AdminProductsPage() {
                   onChange={(e) =>
                     setNewProduct({ ...newProduct, category: e.target.value })
                   }
-                  className="w-full px-4 py-2 rounded-lg border border-input bg-background"
+                  disabled={categoriesLoading || apiCategories.length === 0}
+                  className="w-full px-4 py-2 rounded-lg border border-input bg-background disabled:opacity-60"
                 >
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.nameLao}
+                  {apiCategories.length === 0 ? (
+                    <option value="">
+                      {categoriesLoading
+                        ? "ກຳລັງໂຫຼດໝວດໝູ່..."
+                        : "ບໍ່ມີໝວດໝູ່ (ສ້າງທີ່ /admin/categories)"}
                     </option>
-                  ))}
+                  ) : (
+                    apiCategories.map((cat) => (
+                      <option key={cat.id} value={String(cat.id)}>
+                        {cat.name}
+                        {cat.slug ? ` — ${cat.slug}` : ""}
+                      </option>
+                    ))
+                  )}
                 </select>
+                {categoriesError && (
+                  <p className="mt-1 text-xs text-destructive">{categoriesError}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">ຈຳນວນສະຕ໋ອກ</label>

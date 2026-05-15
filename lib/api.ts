@@ -1,6 +1,9 @@
 import axios, { type AxiosInstance } from "axios";
 import type {
   ApiAdminLoginResponse,
+  ApiCategory,
+  ApiCategoryListResponse,
+  ApiCreateCategoryBody,
   ApiCreateOrderBody,
   ApiCreateProductBody,
   ApiLoginResponse,
@@ -8,6 +11,7 @@ import type {
   ApiOrderListResponse,
   ApiProduct,
   ApiProductListResponse,
+  ApiUpdateCategoryBody,
   ApiUpdateProductBody,
   ApiUser,
 } from "@/lib/api-types";
@@ -163,6 +167,49 @@ export async function apiUpdateProduct(
 
 export async function apiDeleteProduct(id: number | string): Promise<void> {
   await adminClient.delete(`/products/${id}`);
+}
+
+/** Public — GET /categories */
+export async function apiListCategories(params?: {
+  roots_only?: boolean;
+  parent_id?: number;
+}): Promise<ApiCategory[]> {
+  const { data } = await publicClient.get<
+    ApiCategoryListResponse | ApiCategory[]
+  >("/categories", { params });
+  if (Array.isArray(data)) return data;
+  return data.items ?? [];
+}
+
+/** Public — GET /categories/:id */
+export async function apiGetCategory(id: number): Promise<ApiCategory> {
+  const { data } = await publicClient.get<ApiCategory>(`/categories/${id}`);
+  return data;
+}
+
+/** Admin JWT — POST /categories */
+export async function apiCreateCategory(
+  body: ApiCreateCategoryBody
+): Promise<ApiCategory> {
+  const { data } = await adminClient.post<ApiCategory>("/categories", body);
+  return data;
+}
+
+/** Admin JWT — PUT /categories/:id */
+export async function apiUpdateCategory(
+  id: number,
+  body: ApiUpdateCategoryBody
+): Promise<ApiCategory> {
+  const { data } = await adminClient.put<ApiCategory>(
+    `/categories/${id}`,
+    body
+  );
+  return data;
+}
+
+/** Admin JWT — DELETE /categories/:id */
+export async function apiDeleteCategory(id: number): Promise<void> {
+  await adminClient.delete(`/categories/${id}`);
 }
 
 export async function apiListOrders(params?: {

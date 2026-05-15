@@ -1,16 +1,31 @@
 /** Types aligned with the backend OpenAPI-style contract */
 
+/** Nested on GET/POST /products response when backend expands category */
+export interface ApiCategory {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  sort_order: number;
+  is_active: boolean;
+  parent_id?: number | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ApiProduct {
   id: number;
   name: string;
-  description: string;
-  image_url: string;
-  category: string;
+  description?: string;
+  image_url?: string;
+  category_id: number;
+  /** Populated when API embeds category on product responses */
+  category?: ApiCategory;
   original_price_cny: number;
   exchange_rate: number;
   profit_margin: number;
   final_price_lak: number;
-  source_url: string;
+  source_url?: string;
   created_at: string;
   updated_at: string;
 }
@@ -37,17 +52,16 @@ export interface ApiUser {
   [key: string]: unknown;
 }
 
+/** POST /products — backend ຄິດໄລ່ final_price_lak ຈາກລາຄາ × ອັດຕາ × (1 + profit_margin) */
 export interface ApiCreateProductBody {
   name: string;
-  description: string;
-  image_url: string;
-  category: string;
+  category_id: number;
   original_price_cny: number;
   exchange_rate: number;
   profit_margin: number;
-  /** Backend expects this on POST /products (same formula as admin preview). */
-  final_price_lak: number;
-  source_url: string;
+  description?: string;
+  image_url?: string;
+  source_url?: string;
 }
 
 export type ApiUpdateProductBody = Partial<ApiCreateProductBody>;
@@ -70,3 +84,18 @@ export interface ApiOrder {
 export interface ApiOrderListResponse {
   items?: ApiOrder[];
 }
+
+export interface ApiCategoryListResponse {
+  items: ApiCategory[];
+}
+
+export interface ApiCreateCategoryBody {
+  name: string;
+  slug: string;
+  description?: string;
+  sort_order?: number;
+  is_active?: boolean;
+  parent_id?: number | null;
+}
+
+export type ApiUpdateCategoryBody = Partial<ApiCreateCategoryBody>;
