@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard,
   Package,
@@ -31,6 +33,11 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { user, token, isReady, logout } = useAuth();
+
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -135,6 +142,33 @@ export default function AdminLayout({
 
         {/* Main Content */}
         <main className="flex-1 min-h-screen">
+          <div className="border-b border-border bg-card px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+            {isReady && !token && (
+              <p className="text-sm text-muted-foreground">
+                ບໍ່ມີ JWT —{" "}
+                <Link href="/admin/login" className="text-primary font-medium hover:underline">
+                  ເຂົ້າລະບົບ
+                </Link>{" "}
+                ເພື່ອ POST /products ແລະ GET /orders
+              </p>
+            )}
+            {isReady && token && user && (
+              <p className="text-sm text-muted-foreground">
+                ຜູ້ໃຊ້:{" "}
+                <span className="font-medium text-foreground">
+                  {String(user.username ?? user.id ?? "—")}
+                </span>
+                {user.role != null && (
+                  <span className="ml-2 text-xs">({String(user.role)})</span>
+                )}
+              </p>
+            )}
+            {token && (
+              <Button variant="outline" size="sm" onClick={() => logout()}>
+                ອອກຈາກລະບົບ
+              </Button>
+            )}
+          </div>
           <div className="p-6">{children}</div>
         </main>
       </div>

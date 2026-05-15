@@ -1,6 +1,15 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useCallback,
+  useEffect,
+} from "react";
+import { apiListProducts, isApiConfigured } from "@/lib/api";
+import { apiProductToStoreProduct } from "@/lib/map-api-product";
 
 export interface Product {
   id: string;
@@ -59,11 +68,15 @@ interface StoreContextType {
   
   // Products
   products: Product[];
+  productsLoading: boolean;
+  productsError: string | null;
   setProducts: (products: Product[]) => void;
+  refreshProducts: () => Promise<void>;
   
   // Orders
   orders: Order[];
-  addOrder: (order: Omit<Order, "id" | "createdAt">) => void;
+  setOrders: (orders: Order[]) => void;
+  addOrder: (order: Omit<Order, "id" | "createdAt"> & { id?: string }) => void;
   updateOrderStatus: (orderId: string, status: Order["status"]) => void;
 }
 
@@ -210,8 +223,47 @@ const mockProducts: Product[] = [
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [exchangeRate, setExchangeRate] = useState(3500); // CNY to LAK
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+
+  const refreshProducts = useCallback(async () => {
+    if (!isApiConfigured()) {
+      setProducts(mockProducts);
+      setProductsError(
+        "ບໍ່ພົບ NEXT_PUBLIC_API_URL — ສະແດງຂໍ້ມູນຕົວຢ່າງ. ໃສ່ URL API ໃນໄຟລ໌ .env"
+      );
+      setProductsLoading(false);
+      return;
+    }
+
+    setProductsLoading(true);
+    setProductsError(null);
+    try {
+      const items = await apiListProducts();
+      if (items.length === 0) {
+        setProducts([]);
+      } else {
+        setProducts(items.map(apiProductToStoreProduct));
+        const rate = items[0]?.exchange_rate;
+        if (typeof rate === "number" && rate > 0) {
+          setExchangeRate(rate);
+        }
+      }
+    } catch {
+      setProducts(mockProducts);
+      setProductsError(
+        "ເຊື່ອມ API ບໍ່ສຳເລັດ — ສະແດງຂໍ້ມູນຕົວຢ່າງ. ກວດ Docker ແລະ URL ວ່າເປີດ http://localhost:8080 ຫຼືບໍ່"
+      );
+    } finally {
+      setProductsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshProducts();
+  }, [refreshProducts]);
 
   const addToCart = useCallback((product: Product, quantity = 1) => {
     setCart((prev) => {
@@ -254,10 +306,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const cartCount = cart.reduce((count, item) => count + item.quantity, 0);
 
-  const addOrder = useCallback((order: Omit<Order, "id" | "createdAt">) => {
+  const addOrder = useCallback((order: Omit<Order, "id" | "createdAt"> & { id?: string }) => {
+    const { id: clientId, ...rest } = order;
     const newOrder: Order = {
-      ...order,
-      id: `ORD-${Date.now()}`,
+      ...rest,
+      id: clientId ?? `ORD-${Date.now()}`,
       createdAt: new Date(),
     };
     setOrders((prev) => [newOrder, ...prev]);
@@ -284,8 +337,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         exchangeRate,
         setExchangeRate,
         products,
+        productsLoading,
+        productsError,
         setProducts,
+        refreshProducts,
         orders,
+        setOrders,
         addOrder,
         updateOrderStatus,
       }}

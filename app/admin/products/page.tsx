@@ -17,6 +17,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useStore, Product } from "@/lib/store";
 import { formatLAK, calculateSellingPrice } from "@/lib/format";
+import { useAuth } from "@/lib/auth";
+import {
+  apiCreateProduct,
+  apiDeleteProduct,
+  isApiConfigured,
+} from "@/lib/api";
+import {
+  marginPercentToRatio,
+  slugToCategoryLao,
+} from "@/lib/map-api-product";
 
 const categories = [
   { id: "supplements", nameLao: "ອາຫານເສີມ" },
@@ -26,10 +36,13 @@ const categories = [
 ];
 
 export default function AdminProductsPage() {
-  const { products, setProducts, exchangeRate } = useStore();
+  const { products, setProducts, exchangeRate, refreshProducts } = useStore();
+  const { token } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState(false);
 
   const [newProduct, setNewProduct] = useState({
     name: "",
@@ -52,7 +65,8 @@ export default function AdminProductsPage() {
       p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
+    setApiError(null);
     const priceCNY = parseFloat(newProduct.priceCNY);
     const marginPercent = parseFloat(newProduct.marginPercent);
     const stock = parseInt(newProduct.stock);
@@ -60,58 +74,130 @@ export default function AdminProductsPage() {
     if (isNaN(priceCNY) || isNaN(marginPercent) || isNaN(stock)) return;
 
     const category = categories.find((c) => c.id === newProduct.category);
-    const product: Product = {
-      id: Date.now().toString(),
-      name: newProduct.name,
-      nameLao: newProduct.nameLao,
-      description: newProduct.description,
-      descriptionLao: newProduct.descriptionLao,
-      howToUse: newProduct.howToUse,
-      howToUseLao: newProduct.howToUseLao,
-      priceCNY,
-      priceLAK: calculateSellingPrice(priceCNY, marginPercent, exchangeRate),
-      marginPercent,
-      images: [
-        newProduct.imageUrl ||
-          "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop",
-      ],
-      category: category?.id || "supplements",
-      categoryLao: category?.nameLao || "ອາຫານເສີມ",
-      stock,
-      sourceUrl: newProduct.sourceUrl,
-      trustBadges: ["ຂອງແທ້ 100%", "ນຳເຂົ້າໂດຍກົງ"],
-      isNew: true,
-      isBestSeller: false,
+    const categoryLao = category?.nameLao ?? slugToCategoryLao(newProduct.category);
+
+    const finishLocal = () => {
+      const cat = categories.find((c) => c.id === newProduct.category);
+      const product: Product = {
+        id: Date.now().toString(),
+        name: newProduct.name,
+        nameLao: newProduct.nameLao,
+        description: newProduct.description,
+        descriptionLao: newProduct.descriptionLao,
+        howToUse: newProduct.howToUse,
+        howToUseLao: newProduct.howToUseLao,
+        priceCNY,
+        priceLAK: calculateSellingPrice(priceCNY, marginPercent, exchangeRate),
+        marginPercent,
+        images: [
+          newProduct.imageUrl ||
+            "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop",
+        ],
+        category: cat?.id || "supplements",
+        categoryLao: cat?.nameLao || "ອາຫານເສີມ",
+        stock,
+        sourceUrl: newProduct.sourceUrl,
+        trustBadges: ["ຂອງແທ້ 100%", "ນຳເຂົ້າໂດຍກົງ"],
+        isNew: true,
+        isBestSeller: false,
+      };
+      setProducts([product, ...products]);
+      setIsModalOpen(false);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+      setNewProduct({
+        name: "",
+        nameLao: "",
+        description: "",
+        descriptionLao: "",
+        howToUse: "",
+        howToUseLao: "",
+        priceCNY: "",
+        marginPercent: "50",
+        category: "supplements",
+        stock: "50",
+        sourceUrl: "",
+        imageUrl: "",
+      });
     };
 
-    setProducts([product, ...products]);
-    setIsModalOpen(false);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2000);
+    if (!isApiConfigured() || !token) {
+      finishLocal();
+      if (isApiConfigured() && !token) {
+        setApiError(
+          "ບໍ່ມີ JWT — ບັນທຶກແບບທ້ອງຖິ່ນເທົ່ານັ້ນ. ໄປ /admin/login ເພື່ອ sync ກັບ API"
+        );
+      }
+      return;
+    }
 
-    // Reset form
-    setNewProduct({
-      name: "",
-      nameLao: "",
-      description: "",
-      descriptionLao: "",
-      howToUse: "",
-      howToUseLao: "",
-      priceCNY: "",
-      marginPercent: "50",
-      category: "supplements",
-      stock: "50",
-      sourceUrl: "",
-      imageUrl: "",
-    });
+    setPendingAction(true);
+    try {
+      await apiCreateProduct({
+        name: newProduct.nameLao || newProduct.name || "ສິນຄ້າ",
+        description: newProduct.descriptionLao || newProduct.description || "",
+        image_url:
+          newProduct.imageUrl.trim() ||
+          "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop",
+        category: categoryLao,
+        original_price_cny: priceCNY,
+        exchange_rate: exchangeRate,
+        profit_margin: marginPercentToRatio(marginPercent),
+        final_price_lak: Math.round(
+          calculateSellingPrice(priceCNY, marginPercent, exchangeRate)
+        ),
+        source_url: newProduct.sourceUrl || "https://example.com",
+      });
+      await refreshProducts();
+      setIsModalOpen(false);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+      setNewProduct({
+        name: "",
+        nameLao: "",
+        description: "",
+        descriptionLao: "",
+        howToUse: "",
+        howToUseLao: "",
+        priceCNY: "",
+        marginPercent: "50",
+        category: "supplements",
+        stock: "50",
+        sourceUrl: "",
+        imageUrl: "",
+      });
+    } catch {
+      setApiError("ເພີ່ມສິນຄ້າຜ່ານ API ບໍ່ສຳເລັດ — ກວດຂໍ້ມູນ ແລະ backend");
+    } finally {
+      setPendingAction(false);
+    }
   };
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
+    if (!confirm("ລຶບສິນຄ້ານີ້ບໍ?")) return;
+    setApiError(null);
+    if (token && isApiConfigured()) {
+      setPendingAction(true);
+      try {
+        await apiDeleteProduct(id);
+        await refreshProducts();
+      } catch {
+        setApiError("ລຶບຜ່ານ API ບໍ່ສຳເລັດ");
+      } finally {
+        setPendingAction(false);
+      }
+      return;
+    }
     setProducts(products.filter((p) => p.id !== id));
   };
 
   return (
     <div>
+      {apiError && (
+        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {apiError}
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">ຈັດການສິນຄ້າ</h1>
@@ -409,9 +495,9 @@ export default function AdminProductsPage() {
               <Button variant="outline" onClick={() => setIsModalOpen(false)}>
                 ຍົກເລີກ
               </Button>
-              <Button onClick={handleAddProduct} className="flex-1">
+              <Button onClick={handleAddProduct} className="flex-1" disabled={pendingAction}>
                 <Upload className="h-4 w-4 mr-2" />
-                ເພີ່ມສິນຄ້າ
+                {pendingAction ? "ກຳລັງບັນທຶກ..." : "ເພີ່ມສິນຄ້າ"}
               </Button>
             </div>
           </motion.div>

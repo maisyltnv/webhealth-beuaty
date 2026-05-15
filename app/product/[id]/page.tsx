@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { useStore, Product } from "@/lib/store";
 import { formatLAK } from "@/lib/format";
 import { ProductCard } from "@/components/products/product-card";
+import { apiGetProduct, isApiConfigured } from "@/lib/api";
+import { apiProductToStoreProduct } from "@/lib/map-api-product";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -28,24 +30,60 @@ export default function ProductDetailPage() {
   const { products, addToCart } = useStore();
   
   const [product, setProduct] = useState<Product | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [isAdded, setIsAdded] = useState(false);
   const [viewersCount, setViewersCount] = useState(0);
 
   useEffect(() => {
-    const found = products.find((p) => p.id === params.id);
-    if (found) {
-      setProduct(found);
-      // Simulate viewers count
+    const idParam = params.id;
+    if (!idParam || typeof idParam !== "string") return;
+
+    const fromStore = products.find((p) => p.id === idParam);
+    if (fromStore) {
+      setProduct(fromStore);
+      setLoadError(null);
       setViewersCount(Math.floor(Math.random() * 15) + 5);
+      return;
     }
+
+    if (!isApiConfigured()) {
+      setProduct(null);
+      setLoadError("ບໍ່ພົບສິນຄ້າ");
+      return;
+    }
+
+    setProduct(null);
+    setLoadError(null);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const api = await apiGetProduct(idParam);
+        if (cancelled) return;
+        setProduct(apiProductToStoreProduct(api));
+        setLoadError(null);
+        setViewersCount(Math.floor(Math.random() * 15) + 5);
+      } catch {
+        if (!cancelled) {
+          setProduct(null);
+          setLoadError("ໂຫຼດສິນຄ້າບໍ່ສຳເລັດ ຫຼື ບໍ່ມີລາຍການນີ້");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id, products]);
 
   if (!product) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">ກຳລັງໂຫຼດ...</p>
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <p className="text-muted-foreground text-center">
+          {loadError ?? "ກຳລັງໂຫຼດ..."}
+        </p>
       </div>
     );
   }

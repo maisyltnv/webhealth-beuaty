@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono, Noto_Sans_Lao } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { StoreProvider } from '@/lib/store'
+import { AuthProvider } from '@/lib/auth'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import './globals.css'
@@ -62,11 +63,13 @@ export default function RootLayout({
     <html lang="lo" className={`${geist.variable} ${geistMono.variable} ${notoSansLao.variable} bg-background`}>
       <body className="font-sans antialiased min-h-screen flex flex-col">
         <StoreProvider>
-          <Header />
-          <main className="flex-1">
-            {children}
-          </main>
-          <Footer />
+          <AuthProvider>
+            <Header />
+            <main className="flex-1">
+              {children}
+            </main>
+            <Footer />
+          </AuthProvider>
         </StoreProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

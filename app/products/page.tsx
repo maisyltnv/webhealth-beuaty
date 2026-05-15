@@ -13,6 +13,7 @@ const categories = [
   { id: "supplements", nameLao: "ອາຫານເສີມ" },
   { id: "skincare", nameLao: "ດູແລຜິວໜັງ" },
   { id: "vitamins", nameLao: "ວິຕາມິນ" },
+  { id: "beauty", nameLao: "ຄວາມງາມ" },
 ];
 
 const sortOptions = [
@@ -23,7 +24,7 @@ const sortOptions = [
 ];
 
 export default function ProductsPage() {
-  const { products } = useStore();
+  const { products, productsLoading, productsError } = useStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -93,6 +94,12 @@ export default function ProductsPage() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        {productsError && (
+          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+            {productsError}
+          </div>
+        )}
+
         {/* Filters Bar */}
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
           {/* Search */}
@@ -173,11 +180,13 @@ export default function ProductsPage() {
 
         {/* Results Count */}
         <p className="text-muted-foreground mb-6">
-          ພົບ {filteredProducts.length} ສິນຄ້າ
+          {productsLoading ? "ກຳລັງໂຫຼດ..." : `ພົບ ${filteredProducts.length} ສິນຄ້າ`}
         </p>
 
         {/* Products Grid */}
-        {filteredProducts.length > 0 ? (
+        {productsLoading ? (
+          <div className="text-center py-16 text-muted-foreground">ກຳລັງໂຫຼດສິນຄ້າຈາກ API...</div>
+        ) : filteredProducts.length > 0 ? (
           <div
             className={
               viewMode === "grid"
