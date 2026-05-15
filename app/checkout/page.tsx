@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
@@ -372,7 +373,11 @@ export default function CheckoutPage() {
 
                   {!token && (
                     <p className="text-sm text-muted-foreground mb-4 rounded-lg border border-border bg-muted/40 px-3 py-2">
-                      ບໍ່ໄດ້ເຂົ້າລະບົບແອັດມິນ — ຄຳສັ່ງບັນທຶກໃນແອັບເທົ່ານັ້ນ. ຖ້າຕ້ອງການ POST /orders ກະລຸນາເຂົ້າລະບົບກ່ອນ (ໃຊ້ JWT ດຽວກັນກັບ API).
+                      ບໍ່ໄດ້ເຂົ້າລະບົບ — ຄຳສັ່ງບັນທຶກໃນແອັບເທົ່ານັ້ນ. ຖ້າຕ້ອງການ POST /orders ກະລຸນາ{" "}
+                      <Link href="/login" className="text-primary font-medium underline">
+                        ເຂົ້າລະບົບລູກຄ້າ
+                      </Link>{" "}
+                      ກ່ອນ (JWT ຈາກ API).
                     </p>
                   )}
 

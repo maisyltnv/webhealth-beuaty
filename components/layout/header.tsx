@@ -159,12 +159,28 @@ export function Header() {
             </div>
 
             {/* Right Actions */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
+              <Link
+                href="/login"
+                className="p-2 hover:text-primary transition-colors hidden sm:flex sm:items-center sm:gap-1.5 rounded-md"
+                title="ເຂົ້າລະບົບລູກຄ້າ"
+              >
+                <User className="h-5 w-5" />
+                <span className="text-sm font-medium max-w-[7rem] truncate hidden lg:inline">
+                  ລູກຄ້າ
+                </span>
+              </Link>
+              <Link
+                href="/admin/login"
+                className="p-2 hover:text-amber-600 transition-colors hidden sm:flex sm:items-center sm:gap-1.5 rounded-md text-muted-foreground"
+                title="ເຂົ້າແອັດມິນ"
+              >
+                <span className="text-xs font-semibold uppercase tracking-wide">
+                  Admin
+                </span>
+              </Link>
               <Link href="/wishlist" className="p-2 hover:text-primary transition-colors hidden sm:block">
                 <Heart className="h-5 w-5" />
-              </Link>
-              <Link href="/admin" className="p-2 hover:text-primary transition-colors hidden sm:block">
-                <User className="h-5 w-5" />
               </Link>
               <button
                 className="relative p-2 hover:text-primary transition-colors"
@@ -251,11 +267,18 @@ export function Header() {
                     ສິນຄ້າທັງໝົດ
                   </Link>
                   <Link
-                    href="/admin"
+                    href="/login"
                     className="block py-2 font-medium"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    ແອັດມິນ
+                    ເຂົ້າລະບົບລູກຄ້າ
+                  </Link>
+                  <Link
+                    href="/admin/login"
+                    className="block py-2 font-medium text-amber-700 dark:text-amber-500"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    ເຂົ້າແອັດມິນ
                   </Link>
                 </nav>
               </div>
