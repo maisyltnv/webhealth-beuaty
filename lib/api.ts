@@ -12,6 +12,7 @@ import type {
   ApiUpdateExchangeRateResponse,
   ApiOrder,
   ApiOrderListResponse,
+  ApiOrdersByPhoneResponse,
   ApiShippingConfig,
   ApiShippingQuote,
   ApiProduct,
@@ -108,9 +109,48 @@ function unwrapOrderList(payload: unknown): ApiOrder[] {
   return [];
 }
 
+function parseOrdersByPhoneResponse(
+  data: unknown,
+  page: number,
+  limit: number
+): ApiOrdersByPhoneResponse {
+  const items = unwrapOrderList(data);
+  if (!data || typeof data !== "object") {
+    return {
+      items: [],
+      page,
+      limit,
+      total: 0,
+      total_pages: 0,
+      has_next: false,
+      has_prev: false,
+    };
+  }
+  const record = data as Record<string, unknown>;
+  const total =
+    typeof record.total === "number" ? record.total : items.length;
+  const total_pages =
+    typeof record.total_pages === "number"
+      ? record.total_pages
+      : total > 0
+        ? Math.ceil(total / limit)
+        : 0;
+  return {
+    items,
+    page: typeof record.page === "number" ? record.page : page,
+    limit: typeof record.limit === "number" ? record.limit : limit,
+    total,
+    total_pages,
+    has_next: Boolean(record.has_next),
+    has_prev: Boolean(record.has_prev),
+  };
+}
+
+export const ORDERS_BY_PHONE_PAGE_SIZE = 5;
+
 async function fetchOrdersWithToken(
   token: string,
-  params: { limit: number; offset: number }
+  params: { limit: number; offset: number; phone?: string }
 ): Promise<ApiOrder[]> {
   const { data } = await publicClient.get<unknown>("/orders", {
     params,
@@ -138,6 +178,13 @@ export async function apiRegister(body: {
   return data;
 }
 
+function readAccessToken(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const token = record.access_token ?? record.token;
+  return typeof token === "string" && token.length > 0 ? token : null;
+}
+
 /** Customer login — POST /auth/login */
 export async function apiLogin(body: {
   username: string;
@@ -147,7 +194,11 @@ export async function apiLogin(body: {
     "/auth/login",
     body
   );
-  return data;
+  const access_token = readAccessToken(data);
+  if (!access_token) {
+    throw new Error("API ບໍ່ສົ່ງ access_token");
+  }
+  return { ...(data as ApiLoginResponse), access_token };
 }
 
 /** Admin login — POST /auth/admin/login */
@@ -159,7 +210,11 @@ export async function apiAdminLogin(body: {
     "/auth/admin/login",
     body
   );
-  return data;
+  const access_token = readAccessToken(data);
+  if (!access_token) {
+    throw new Error("API ບໍ່ສົ່ງ access_token");
+  }
+  return { ...(data as ApiAdminLoginResponse), access_token };
 }
 
 /** Current user (client JWT) */
@@ -304,6 +359,36 @@ export async function apiListOrders(params?: {
 
   if (lastResult.length === 0 && lastError) throw lastError;
   return lastResult;
+}
+
+/** Public — GET /ordersbyphone?phone=&page=&limit= (ບໍ່ຕ້ອງ Bearer token) */
+export async function apiLookupOrdersByPhone(
+  phone: string,
+  params?: { page?: number; limit?: number }
+): Promise<ApiOrdersByPhoneResponse> {
+  const trimmed = phone.trim();
+  const page = Math.max(1, params?.page ?? 1);
+  const limit = Math.min(
+    Math.max(1, params?.limit ?? ORDERS_BY_PHONE_PAGE_SIZE),
+    50
+  );
+
+  if (!trimmed) {
+    return {
+      items: [],
+      page,
+      limit,
+      total: 0,
+      total_pages: 0,
+      has_next: false,
+      has_prev: false,
+    };
+  }
+
+  const { data } = await publicClient.get<unknown>("/ordersbyphone", {
+    params: { phone: trimmed, page, limit },
+  });
+  return parseOrdersByPhoneResponse(data, page, limit);
 }
 
 /** Bearer JWT (admin or customer) — GET /orders/:id */

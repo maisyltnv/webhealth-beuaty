@@ -36,6 +36,8 @@ export interface ApiProductListResponse {
 
 export interface ApiLoginResponse {
   access_token: string;
+  expires_at?: string;
+  user?: ApiUser;
 }
 
 /** Response from POST /auth/admin/login */
@@ -145,6 +147,17 @@ export interface ApiOrder {
 
 export interface ApiOrderListResponse {
   items?: ApiOrder[];
+}
+
+/** GET /ordersbyphone — paginated */
+export interface ApiOrdersByPhoneResponse {
+  items: ApiOrder[];
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
 }
 
 export interface ApiCategoryListResponse {

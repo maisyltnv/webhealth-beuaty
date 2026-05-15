@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, type ComponentType } from "react";
+import axios from "axios";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -42,8 +43,8 @@ export function LoginScreen({
     login,
     register,
     loginAdmin,
-    token,
-    adminToken,
+    user,
+    adminUser,
     isReady,
   } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -53,11 +54,12 @@ export function LoginScreen({
   const [loading, setLoading] = useState(false);
 
   const isAdmin = portal === "admin";
-  const sessionToken = isAdmin ? adminToken : token;
+  const sessionUser = isAdmin ? adminUser : user;
 
   useEffect(() => {
-    if (sessionToken) router.replace(redirectIfAuthed);
-  }, [sessionToken, router, redirectIfAuthed]);
+    if (!isReady || !sessionUser) return;
+    router.replace(redirectIfAuthed);
+  }, [isReady, sessionUser, router, redirectIfAuthed]);
 
   if (!isReady) {
     return (
@@ -80,12 +82,23 @@ export function LoginScreen({
         await register(username.trim(), password, registerRole);
       }
       router.push(redirectAfterAuth);
-    } catch {
-      setError(
+    } catch (err) {
+      const apiMsg = axios.isAxiosError(err)
+        ? (() => {
+            const body = err.response?.data;
+            if (body && typeof body === "object" && "error" in body) {
+              return String((body as { error: unknown }).error);
+            }
+            return err.message;
+          })()
+        : err instanceof Error
+          ? err.message
+          : null;
+      const base =
         isAdmin || mode === "login"
-          ? "ເຂົ້າລະບົບບໍ່ສຳເລັດ — ກວດຊື່ຜູ້ໃຊ້ ແລະ ລະຫັດ"
-          : "ລົງທະບຽນບໍ່ສຳເລັດ — ອາດມີຊື່ນີ້ແລ້ວ"
-      );
+          ? "ເຂົ້າລະບົບບໍ່ສຳເລັດ"
+          : "ລົງທະບຽນບໍ່ສຳເລັດ";
+      setError(apiMsg ? `${base}: ${apiMsg}` : `${base} — ກວດຊື່ຜູ້ໃຊ້ ແລະ ລະຫັດ`);
     } finally {
       setLoading(false);
     }

@@ -12,7 +12,12 @@ import {
   Heart,
   Sparkles,
   Pill,
+  Package,
 } from "lucide-react";
+
+/** ຊ່ວຍເວລາ — ສະແດງເມນູ «ລູກຄ້າ» / ເຂົ້າລະບົບ */
+const SHOW_CUSTOMER_LOGIN = false;
+import { OrderLookupDrawer } from "@/components/orders/order-lookup-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useStore } from "@/lib/store";
@@ -21,6 +26,7 @@ import { formatLAK } from "@/lib/format";
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const { cart, cartTotal, cartCount, removeFromCart, updateQuantity, categories } =
@@ -52,7 +58,7 @@ export function Header() {
                 <Sparkles className="h-5 w-5 text-primary-foreground" />
               </div>
               <span className="text-xl font-bold text-primary hidden sm:block">
-                ສຸຂະພາບ & ຄວາມງາມ
+                Logo
               </span>
             </Link>
 
@@ -96,20 +102,34 @@ export function Header() {
 
             {/* Right Actions */}
             <div className="flex items-center gap-1 sm:gap-2">
-              <Link
-                href="/login"
-                className="p-2 hover:text-primary transition-colors hidden sm:flex sm:items-center sm:gap-1.5 rounded-md"
-                title="ເຂົ້າລະບົບລູກຄ້າ"
+              {SHOW_CUSTOMER_LOGIN && (
+                <Link
+                  href="/login"
+                  className="p-2 hover:text-primary transition-colors hidden sm:flex sm:items-center sm:gap-1.5 rounded-md"
+                  title="ເຂົ້າລະບົບລູກຄ້າ"
+                >
+                  <User className="h-5 w-5" />
+                  <span className="text-sm font-medium max-w-[7rem] truncate hidden lg:inline">
+                    ລູກຄ້າ
+                  </span>
+                </Link>
+              )}
+              <button
+                type="button"
+                className="p-2 hover:text-primary transition-colors hidden sm:flex sm:items-center sm:gap-1 rounded-md"
+                onClick={() => setIsOrdersOpen(true)}
+                title="ຄົ້ນຫາຄຳສັ່ງຊື້"
               >
-                <User className="h-5 w-5" />
-                <span className="text-sm font-medium max-w-[7rem] truncate hidden lg:inline">
-                  ລູກຄ້າ
+                <Package className="h-5 w-5" />
+                <span className="text-sm font-medium hidden lg:inline">
+                  ຄຳສັ່ງ
                 </span>
-              </Link>
+              </button>
               <Link href="/wishlist" className="p-2 hover:text-primary transition-colors hidden sm:block">
                 <Heart className="h-5 w-5" />
               </Link>
               <button
+                type="button"
                 className="relative p-2 hover:text-primary transition-colors"
                 onClick={() => setIsCartOpen(true)}
                 aria-label="Open cart"
@@ -184,13 +204,26 @@ export function Header() {
                   >
                     ສິນຄ້າທັງໝົດ
                   </Link>
-                  <Link
-                    href="/login"
-                    className="block py-2 font-medium"
-                    onClick={() => setIsMenuOpen(false)}
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 py-2 font-medium w-full text-left"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsOrdersOpen(true);
+                    }}
                   >
-                    ເຂົ້າລະບົບລູກຄ້າ
-                  </Link>
+                    <Package className="h-4 w-4 text-primary" />
+                    ຄົ້ນຫາຄຳສັ່ງຊື້
+                  </button>
+                  {SHOW_CUSTOMER_LOGIN && (
+                    <Link
+                      href="/login"
+                      className="block py-2 font-medium"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      ເຂົ້າລະບົບລູກຄ້າ
+                    </Link>
+                  )}
                 </nav>
               </div>
             </motion.div>
@@ -308,6 +341,11 @@ export function Header() {
           </>
         )}
       </AnimatePresence>
+
+      <OrderLookupDrawer
+        open={isOrdersOpen}
+        onOpenChange={setIsOrdersOpen}
+      />
     </>
   );
 }
