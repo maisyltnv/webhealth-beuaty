@@ -225,9 +225,9 @@ export async function apiMe(): Promise<ApiUser> {
   return data;
 }
 
-/** Current admin (admin JWT) */
+/** Current admin (admin JWT) — GET /auth/admin/me */
 export async function apiMeAdmin(): Promise<ApiUser> {
-  const { data } = await adminClient.get<ApiUser>("/auth/me");
+  const { data } = await adminClient.get<ApiUser>("/auth/admin/me");
   return data;
 }
 
@@ -328,39 +328,38 @@ export async function apiGetShippingQuote(
   return data;
 }
 
-/** Bearer JWT (admin or customer) — GET /orders */
+/**
+ * Admin panel — GET /orders with admin JWT (Bearer).
+ * Backend returns all orders when JWT role is admin.
+ */
+export async function apiAdminListOrders(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<ApiOrder[]> {
+  if (!getStoredAdminAccessToken()) {
+    throw new Error("missing admin bearer token");
+  }
+  const { data } = await adminClient.get<unknown>("/orders", {
+    params: {
+      limit: params?.limit ?? 50,
+      offset: params?.offset ?? 0,
+    },
+  });
+  return unwrapOrderList(data);
+}
+
+/** Customer account — GET /orders with customer JWT (own orders only). */
 export async function apiListOrders(params?: {
   limit?: number;
   offset?: number;
 }): Promise<ApiOrder[]> {
-  const query = {
-    limit: params?.limit ?? 50,
-    offset: params?.offset ?? 0,
-  };
-  const adminTok = getStoredAdminAccessToken();
-  const userTok = getStoredAccessToken();
-
-  if (!adminTok && !userTok) {
+  if (!getStoredAccessToken()) {
     throw new Error("missing bearer token");
   }
-
-  const tokens = [...new Set([adminTok, userTok].filter(Boolean))] as string[];
-
-  let lastError: unknown;
-  let lastResult: ApiOrder[] = [];
-
-  for (const token of tokens) {
-    try {
-      const list = await fetchOrdersWithToken(token, query);
-      if (list.length > 0) return list;
-      lastResult = list;
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  if (lastResult.length === 0 && lastError) throw lastError;
-  return lastResult;
+  return fetchOrdersWithToken(getStoredAccessToken()!, {
+    limit: params?.limit ?? 50,
+    offset: params?.offset ?? 0,
+  });
 }
 
 /** Public — GET /ordersbyphone?phone=&page=&limit= (ບໍ່ຕ້ອງ Bearer token) */
@@ -412,11 +411,11 @@ export async function apiUpdateOrderStatus(
   return data;
 }
 
-/** Customer JWT — POST /orders */
+/** Public — POST /orders (guest checkout, no login) */
 export async function apiCreateOrder(
   body: ApiCreateOrderBody
 ): Promise<ApiOrder> {
-  const { data } = await userClient.post<ApiOrder>("/orders", body);
+  const { data } = await publicClient.post<ApiOrder>("/orders", body);
   return data;
 }
 

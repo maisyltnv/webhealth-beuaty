@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ApiUser } from "@/lib/api-types";
+import axios from "axios";
 import {
   apiAdminLogin,
   apiLogin,
@@ -154,8 +155,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAdminUser(me);
           writeAdminUserToStorage(me);
         }
-      } catch {
-        if (!cancelled) {
+      } catch (err) {
+        const unauthorized =
+          axios.isAxiosError(err) &&
+          (err.response?.status === 401 || err.response?.status === 403);
+        if (!cancelled && unauthorized) {
           setStoredAdminAccessToken(null);
           setAdminToken(null);
           setAdminUser(null);

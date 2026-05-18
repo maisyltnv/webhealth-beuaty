@@ -108,7 +108,7 @@ export interface ApiOrderShippingInput {
   address_detail: string;
 }
 
-/** POST /orders — customer JWT */
+/** POST /orders — public (no JWT) */
 export interface ApiCreateOrderBody {
   items: ApiOrderItemInput[];
   shipping: ApiOrderShippingInput;

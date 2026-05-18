@@ -64,9 +64,12 @@ export function apiOrderToStoreOrder(o: ApiOrder): Order {
   const shipping = Number(o.shipping_fee_lak ?? 0);
   const total = Number(o.total_amount_lak ?? subtotal + shipping);
 
+  const apiId =
+    typeof o.id === "number" ? o.id : Number.parseInt(String(o.id ?? ""), 10);
+
   return {
     id: displayId,
-    apiId: o.id,
+    apiId: Number.isFinite(apiId) && apiId > 0 ? apiId : undefined,
     items,
     customerInfo: {
       name:

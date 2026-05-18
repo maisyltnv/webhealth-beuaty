@@ -21,10 +21,8 @@ import { useStore, Order } from "@/lib/store";
 import { formatLAK, formatDateLao } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import {
-  apiListOrders,
+  apiAdminListOrders,
   apiUpdateOrderStatus,
-  getStoredAccessToken,
-  getStoredAdminAccessToken,
   isApiConfigured,
 } from "@/lib/api";
 import { apiOrderToStoreOrder } from "@/lib/map-api-order";
@@ -52,15 +50,14 @@ function orderItemCount(order: Order): number {
 }
 
 function resolveOrderApiId(order: Order): number | null {
-  if (order.apiId != null && !Number.isNaN(order.apiId)) return order.apiId;
+  if (order.apiId != null) {
+    const id = Number(order.apiId);
+    if (!Number.isNaN(id) && id > 0) return id;
+  }
   const ordMatch = order.id.match(/^ORD-0*(\d+)$/i);
   if (ordMatch) return parseInt(ordMatch[1], 10);
   if (/^\d+$/.test(order.id)) return parseInt(order.id, 10);
   return null;
-}
-
-function hasOrdersBearer(): boolean {
-  return !!(getStoredAdminAccessToken() || getStoredAccessToken());
 }
 
 function formatOrdersApiError(err: unknown): string {
@@ -81,7 +78,7 @@ function formatOrdersApiError(err: unknown): string {
 
 export default function AdminOrdersPage() {
   const { updateOrderStatus, setOrders } = useStore();
-  const { adminToken, isReady } = useAuth();
+  const { isReady, adminToken } = useAuth();
   const [orders, setLocalOrders] = useState<Order[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -96,9 +93,9 @@ export default function AdminOrdersPage() {
       setOrdersLoadError("ຕັ້ງ NEXT_PUBLIC_API_URL ໃນ .env");
       return;
     }
-    if (!hasOrdersBearer()) {
+    if (!adminToken) {
       setOrdersLoadError(
-        "ບໍ່ມີ Bearer token — ເຂົ້າ /admin/login (ຫຼື login ລູກຄ້າຖ້າ API ຮັບ token ນັ້ນ)"
+        "ບໍ່ມີ admin token — ເຂົ້າ /admin/login (POST /auth/admin/login) ແລ້ວໃຊ້ token ດຽວກັນກັບ Postman"
       );
       return;
     }
@@ -106,15 +103,10 @@ export default function AdminOrdersPage() {
     setLoading(true);
     setOrdersLoadError(null);
     try {
-      const list = await apiListOrders({ limit: 50, offset: 0 });
+      const list = await apiAdminListOrders({ limit: 50, offset: 0 });
       const mapped = list.map(apiOrderToStoreOrder);
       setLocalOrders(mapped);
       setOrders(mapped);
-      if (mapped.length === 0) {
-        setOrdersLoadError(
-          "API ຕອບສຳເລັດແຕ່ບໍ່ມີຄຳສັ່ງ — ກວດວ່າ token ໃນ browser ກັບ Insomnia ເປັນຄົນດຽວກັນ"
-        );
-      }
     } catch (err) {
       setOrdersLoadError(
         `ໂຫຼດ GET /orders ບໍ່ສຳເລັດ: ${formatOrdersApiError(err)}`
@@ -122,12 +114,12 @@ export default function AdminOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [setOrders]);
+  }, [setOrders, adminToken]);
 
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || !adminToken) return;
     void loadOrders();
-  }, [isReady, loadOrders]);
+  }, [isReady, adminToken, loadOrders]);
 
   const filteredOrders = orders.filter((order) => {
     const q = searchQuery.toLowerCase();
@@ -162,7 +154,7 @@ export default function AdminOrdersPage() {
       return;
     }
 
-    if (!getStoredAdminAccessToken()) {
+    if (!adminToken) {
       setStatusError("ຕ້ອງເຂົ້າ /admin/login ເພື່ອອັບເດດສະຖານະ (PUT /orders/:id/status)");
       return;
     }
@@ -207,14 +199,14 @@ export default function AdminOrdersPage() {
         <motion.div>
           <h1 className="text-2xl font-bold text-foreground">ຈັດການຄຳສັ່ງຊື້</h1>
           <p className="text-muted-foreground">
-            ຕິດຕາມ ແລະ ຈັດການຄຳສັ່ງຊື້ຈາກ API (GET /orders)
+            GET /orders (admin JWT) · ລູກຄ້າຄົ້ນຫາດ້ວຍ GET /ordersbyphone
           </p>
         </motion.div>
         <Button
           variant="outline"
           size="sm"
           onClick={() => void loadOrders()}
-          disabled={loading || !hasOrdersBearer()}
+          disabled={loading || !adminToken}
           className="shrink-0"
         >
           {loading ? (
@@ -400,7 +392,10 @@ export default function AdminOrdersPage() {
                           statusUpdatingId === selectedOrder.id ||
                           selectedOrder.status === status
                         }
-                        onClick={() => void handleStatusChange(selectedOrder, status)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleStatusChange(selectedOrder, status);
+                        }}
                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 disabled:opacity-60 ${
                           selectedOrder.status === status
                             ? config.color === "orange"

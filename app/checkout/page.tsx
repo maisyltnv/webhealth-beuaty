@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
 import { formatLAK } from "@/lib/format";
-import { useAuth } from "@/lib/auth";
 import {
   apiCreateOrder,
   apiGetShippingConfig,
@@ -58,7 +57,6 @@ const provinces = [
 export default function CheckoutPage() {
   const router = useRouter();
   const { cart, cartTotal, clearCart, addOrder } = useStore();
-  const { token } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -148,12 +146,6 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
     setOrderError(null);
 
-    if (isApiConfigured() && !token) {
-      setOrderError("ຕ້ອງເຂົ້າລະບົບລູກຄ້າກ່ອນຢືນຢັນຄຳສັ່ງ (POST /orders ຕ້ອງໃຊ້ JWT)");
-      setIsSubmitting(false);
-      return;
-    }
-
     const orderItems = cart
       .map((item) => ({
         product_id: parseInt(item.product.id, 10),
@@ -171,7 +163,7 @@ export default function CheckoutPage() {
 
     let orderNumber: string | undefined;
 
-    if (token && isApiConfigured()) {
+    if (isApiConfigured()) {
       try {
         const created = await apiCreateOrder({
           items: orderItems,
@@ -187,10 +179,24 @@ export default function CheckoutPage() {
         orderNumber =
           created.order_number?.trim() ||
           (created.id != null ? `ORD-${String(created.id).padStart(8, "0")}` : undefined);
-      } catch {
-        setOrderError(
-          "ບັນທຶກຄຳສັ່ງຜ່ານ API ບໍ່ສຳເລັດ — ກວດ JWT, ສິນຄ້າ ແລະ backend"
-        );
+      } catch (err) {
+        let detail = "ກວດວ່າ API ຮັນຢູ່ ແລະ restart ດ້ວຍ code ລ່າສຸດ (docker compose up -d --build)";
+        if (axios.isAxiosError(err)) {
+          const status = err.response?.status;
+          const apiErr =
+            typeof err.response?.data === "object" &&
+            err.response?.data !== null &&
+            "error" in err.response.data
+              ? String((err.response.data as { error: string }).error)
+              : err.message;
+          if (status === 401) {
+            detail =
+              "API ເກົ່າຍັງຕ້ອງ login — restart backend: docker compose up -d --build";
+          } else if (apiErr) {
+            detail = apiErr;
+          }
+        }
+        setOrderError(`ບັນທຶກຄຳສັ່ງຜ່ານ API ບໍ່ສຳເລັດ — ${detail}`);
         setIsSubmitting(false);
         return;
       }
@@ -472,16 +478,6 @@ export default function CheckoutPage() {
                   exit={{ opacity: 0, x: -20 }}
                 >
                   <h2 className="text-2xl font-bold mb-6">ຢືນຢັນຄຳສັ່ງຊື້</h2>
-
-                  {!token && (
-                    <p className="text-sm text-muted-foreground mb-4 rounded-lg border border-border bg-muted/40 px-3 py-2">
-                      ບໍ່ໄດ້ເຂົ້າລະບົບ — ຄຳສັ່ງບັນທຶກໃນແອັບເທົ່ານັ້ນ. ຖ້າຕ້ອງການ POST /orders ກະລຸນາ{" "}
-                      <Link href="/login" className="text-primary font-medium underline">
-                        ເຂົ້າລະບົບລູກຄ້າ
-                      </Link>{" "}
-                      ກ່ອນ (JWT ຈາກ API).
-                    </p>
-                  )}
 
                   {orderError && (
                     <p className="text-sm text-destructive mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2">
