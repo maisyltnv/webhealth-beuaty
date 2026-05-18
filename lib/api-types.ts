@@ -1,5 +1,46 @@
 /** Types aligned with the backend OpenAPI-style contract */
 
+/** GET /banners — homepage hero slides */
+export interface ApiBanner {
+  id: number;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  image_url: string;
+  cta_label?: string;
+  link_url?: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ApiBannerListResponse {
+  items: ApiBanner[];
+}
+
+export interface ApiCreateBannerBody {
+  title: string;
+  subtitle?: string;
+  description?: string;
+  image_url: string;
+  cta_label?: string;
+  link_url?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export interface ApiUpdateBannerBody {
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  image_url?: string;
+  cta_label?: string;
+  link_url?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
 /** Nested on GET/POST /products response when backend expands category */
 export interface ApiCategory {
   id: number;

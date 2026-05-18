@@ -1,6 +1,10 @@
 import axios, { type AxiosInstance } from "axios";
 import type {
   ApiAdminLoginResponse,
+  ApiBanner,
+  ApiBannerListResponse,
+  ApiCreateBannerBody,
+  ApiUpdateBannerBody,
   ApiCategory,
   ApiCategoryListResponse,
   ApiCreateCategoryBody,
@@ -454,6 +458,65 @@ export async function apiUpdateExchangeRate(
     body
   );
   return data;
+}
+
+function unwrapBannerList(payload: unknown): ApiBanner[] {
+  if (Array.isArray(payload)) return payload as ApiBanner[];
+  if (!payload || typeof payload !== "object") return [];
+  const record = payload as ApiBannerListResponse;
+  return record.items ?? [];
+}
+
+/** Public — GET /banners (is_active=true only) */
+export async function apiListPublicBanners(): Promise<ApiBanner[]> {
+  const { data } = await publicClient.get<unknown>("/banners");
+  return unwrapBannerList(data);
+}
+
+/** Public — GET /banners/:id (active only) */
+export async function apiGetPublicBanner(
+  id: number | string
+): Promise<ApiBanner> {
+  const { data } = await publicClient.get<ApiBanner>(`/banners/${id}`);
+  return data;
+}
+
+/** Admin — GET /banners?include_inactive=true */
+export async function apiAdminListBanners(): Promise<ApiBanner[]> {
+  const { data } = await adminClient.get<unknown>("/banners", {
+    params: { include_inactive: true },
+  });
+  return unwrapBannerList(data);
+}
+
+/** Admin — GET /banners/:id */
+export async function apiAdminGetBanner(
+  id: number | string
+): Promise<ApiBanner> {
+  const { data } = await adminClient.get<ApiBanner>(`/banners/${id}`);
+  return data;
+}
+
+/** Admin — POST /banners */
+export async function apiCreateBanner(
+  body: ApiCreateBannerBody
+): Promise<ApiBanner> {
+  const { data } = await adminClient.post<ApiBanner>("/banners", body);
+  return data;
+}
+
+/** Admin — PUT /banners/:id */
+export async function apiUpdateBanner(
+  id: number | string,
+  body: ApiUpdateBannerBody
+): Promise<ApiBanner> {
+  const { data } = await adminClient.put<ApiBanner>(`/banners/${id}`, body);
+  return data;
+}
+
+/** Admin — DELETE /banners/:id */
+export async function apiDeleteBanner(id: number | string): Promise<void> {
+  await adminClient.delete(`/banners/${id}`);
 }
 
 export function isApiConfigured(): boolean {
