@@ -125,9 +125,9 @@ export function Header() {
                   ຄຳສັ່ງ
                 </span>
               </button>
-              <Link href="/wishlist" className="p-2 hover:text-primary transition-colors hidden sm:block">
+              {/* <Link href="/wishlist" className="p-2 hover:text-primary transition-colors hidden sm:block">
                 <Heart className="h-5 w-5" />
-              </Link>
+              </Link> */}
               <button
                 type="button"
                 className="relative p-2 hover:text-primary transition-colors"
