@@ -301,7 +301,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setProductsLoading(true);
     setProductsError(null);
     try {
-      const items = await apiListProducts();
+      const { items } = await apiListProducts({ limit: 200, offset: 0 });
       if (items.length === 0) {
         setProducts([]);
       } else {

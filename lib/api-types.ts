@@ -30,8 +30,21 @@ export interface ApiProduct {
   updated_at: string;
 }
 
+/** GET /products — paginated list with optional search */
 export interface ApiProductListResponse {
   items: ApiProduct[];
+  total: number;
+}
+
+export interface ApiProductListParams {
+  limit?: number;
+  offset?: number;
+  /** Filter by category (numeric id from GET /categories) */
+  category_id?: number;
+  /** Search name/description (recommended) */
+  q?: string;
+  /** Same as q */
+  search?: string;
 }
 
 export interface ApiLoginResponse {

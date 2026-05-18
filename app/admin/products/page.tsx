@@ -23,9 +23,11 @@ import {
   apiDeleteProduct,
   apiGetProduct,
   apiListCategories,
+  apiListProducts,
   apiUpdateProduct,
   isApiConfigured,
 } from "@/lib/api";
+import { apiProductToStoreProduct } from "@/lib/map-api-product";
 import type { ApiCategory } from "@/lib/api-types";
 import {
   marginPercentToRatio,
@@ -43,6 +45,9 @@ export default function AdminProductsPage() {
   const { products, setProducts, exchangeRate, refreshProducts } = useStore();
   const { adminToken } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Product[] | null>(null);
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -200,11 +205,35 @@ export default function AdminProductsPage() {
     fillFromStore();
   };
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.nameLao.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults(null);
+      setSearchTotal(0);
+      setSearchLoading(false);
+      return;
+    }
+    if (!isApiConfigured()) return;
+
+    setSearchLoading(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const { items, total } = await apiListProducts({ q, limit: 100, offset: 0 });
+        setSearchResults(items.map(apiProductToStoreProduct));
+        setSearchTotal(total);
+      } catch {
+        setSearchResults([]);
+        setSearchTotal(0);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  const displayProducts = searchResults ?? products;
+  const resultCount = searchResults != null ? searchTotal : products.length;
 
   const handleSaveProduct = async () => {
     setApiError(null);
@@ -467,12 +496,19 @@ export default function AdminProductsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="ຄົ້ນຫາສິນຄ້າ..."
+            placeholder="ຄົ້ນຫາສິນຄ້າ (ຊື່, ລາຍລະອຽດ)..."
             className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        <p className="text-sm text-muted-foreground mt-2">
+          {searchLoading
+            ? "ກຳລັງຄົ້ນຫາ..."
+            : searchQuery.trim()
+              ? `ພົບ ${resultCount} ສິນຄ້າ`
+              : `${resultCount} ສິນຄ້າທັງໝົດ`}
+        </p>
       </div>
 
       {/* Products Table */}
@@ -492,7 +528,7 @@ export default function AdminProductsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredProducts.map((product) => (
+              {displayProducts.map((product) => (
                 <motion.tr
                   key={product.id}
                   initial={{ opacity: 0 }}
@@ -570,7 +606,7 @@ export default function AdminProductsPage() {
           </table>
         </div>
 
-        {filteredProducts.length === 0 && (
+        {displayProducts.length === 0 && (
           <div className="p-12 text-center">
             <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">ບໍ່ພົບສິນຄ້າ</p>

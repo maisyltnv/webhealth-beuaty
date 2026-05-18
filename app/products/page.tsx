@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Search, SlidersHorizontal, Grid3X3, LayoutList, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/products/product-card";
-import { useStore } from "@/lib/store";
+import { useStore, type Product } from "@/lib/store";
+import { apiListProducts, isApiConfigured } from "@/lib/api";
+import { apiProductToStoreProduct } from "@/lib/map-api-product";
 
 const sortOptions = [
   { id: "newest", nameLao: "ໃໝ່ສຸດ" },
@@ -16,14 +18,43 @@ const sortOptions = [
   { id: "bestseller", nameLao: "ຂາຍດີ" },
 ];
 
+function sortProducts(list: Product[], sortBy: string): Product[] {
+  const result = [...list];
+  switch (sortBy) {
+    case "price-low":
+      result.sort((a, b) => a.priceLAK - b.priceLAK);
+      break;
+    case "price-high":
+      result.sort((a, b) => b.priceLAK - a.priceLAK);
+      break;
+    case "bestseller":
+      result.sort(
+        (a, b) => (b.isBestSeller ? 1 : 0) - (a.isBestSeller ? 1 : 0)
+      );
+      break;
+    case "newest":
+    default:
+      result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
+      break;
+  }
+  return result;
+}
+
 export default function ProductsPage() {
   const searchParams = useSearchParams();
-  const { products, productsLoading, productsError, categories } = useStore();
+  const router = useRouter();
+  const { categories } = useStore();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const categoryFilters = useMemo(
     () => [
@@ -36,6 +67,14 @@ export default function ProductsPage() {
     [categories]
   );
 
+  const categoryId = useMemo(() => {
+    if (selectedCategory === "all") return undefined;
+    const cat = categories.find(
+      (c) => (c.slug?.trim() || `category-${c.id}`) === selectedCategory
+    );
+    return cat?.id;
+  }, [selectedCategory, categories]);
+
   useEffect(() => {
     const cat = searchParams.get("category");
     if (cat) setSelectedCategory(cat);
@@ -43,48 +82,64 @@ export default function ProductsPage() {
     setSearchQuery(q ?? "");
   }, [searchParams]);
 
-  const filteredProducts = useMemo(() => {
-    let result = [...products];
-
-    // Search filter
-    if (searchQuery) {
-      result = result.filter(
-        (p) =>
-          p.nameLao.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+  const fetchProducts = useCallback(async () => {
+    if (!isApiConfigured()) {
+      setLoadError("ບໍ່ພົບ NEXT_PUBLIC_API_URL ໃນ .env");
+      setProducts([]);
+      setTotal(0);
+      setLoading(false);
+      return;
     }
 
-    // Category filter
-    if (selectedCategory !== "all") {
-      result = result.filter(
-        (p) => p.category.toLowerCase() === selectedCategory
-      );
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const { items, total: apiTotal } = await apiListProducts({
+        q: searchQuery.trim() || undefined,
+        category_id: categoryId,
+        limit: 100,
+        offset: 0,
+      });
+      setProducts(items.map(apiProductToStoreProduct));
+      setTotal(apiTotal);
+    } catch {
+      setLoadError("ໂຫຼດສິນຄ້າຈາກ API ບໍ່ສຳເລັດ");
+      setProducts([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
     }
+  }, [searchQuery, categoryId]);
 
-    // Sort
-    switch (sortBy) {
-      case "price-low":
-        result.sort((a, b) => a.priceLAK - b.priceLAK);
-        break;
-      case "price-high":
-        result.sort((a, b) => b.priceLAK - a.priceLAK);
-        break;
-      case "bestseller":
-        result.sort((a, b) => (b.isBestSeller ? 1 : 0) - (a.isBestSeller ? 1 : 0));
-        break;
-      case "newest":
-      default:
-        result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
-        break;
-    }
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchProducts();
+    }, searchQuery.trim() ? 300 : 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchProducts, searchQuery]);
 
-    return result;
-  }, [products, searchQuery, selectedCategory, sortBy]);
+  const sortedProducts = useMemo(
+    () => sortProducts(products, sortBy),
+    [products, sortBy]
+  );
+
+  const applySearchToUrl = () => {
+    const params = new URLSearchParams();
+    const q = searchQuery.trim();
+    if (q) params.set("q", q);
+    if (selectedCategory !== "all") params.set("category", selectedCategory);
+    const qs = params.toString();
+    router.push(qs ? `/products?${qs}` : "/products");
+  };
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedCategory("all");
+    router.push("/products");
+  };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Page Header */}
+    <motion.div className="min-h-screen bg-background">
       <div className="bg-primary py-12">
         <div className="container mx-auto px-4">
           <motion.h1
@@ -106,33 +161,41 @@ export default function ProductsPage() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {productsError && (
-          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-            {productsError}
-          </div>
+        {loadError && (
+          <motion.div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+            {loadError}
+          </motion.div>
         )}
 
-        {/* Filters Bar */}
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="ຄົ້ນຫາສິນຄ້າ..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+          <form
+            className="relative flex-1 max-w-md flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              applySearchToUrl();
+            }}
+          >
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="ຄົ້ນຫາສິນຄ້າ (ຊື່, ລາຍລະອຽດ)..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Button type="submit" variant="secondary" className="shrink-0">
+              ຄົ້ນຫາ
+            </Button>
+          </form>
 
-          {/* Desktop Filters */}
           <div className="hidden lg:flex items-center gap-4">
-            {/* Categories */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {categoryFilters.map((cat) => (
                 <button
                   key={cat.id}
+                  type="button"
                   onClick={() => setSelectedCategory(cat.id)}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                     selectedCategory === cat.id
@@ -145,7 +208,6 @@ export default function ProductsPage() {
               ))}
             </div>
 
-            {/* Sort */}
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -158,9 +220,9 @@ export default function ProductsPage() {
               ))}
             </select>
 
-            {/* View Mode */}
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            <motion.div className="flex items-center gap-1 bg-muted rounded-lg p-1">
               <button
+                type="button"
                 onClick={() => setViewMode("grid")}
                 className={`p-2 rounded-md ${
                   viewMode === "grid" ? "bg-background shadow-sm" : ""
@@ -169,6 +231,7 @@ export default function ProductsPage() {
                 <Grid3X3 className="h-4 w-4" />
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode("list")}
                 className={`p-2 rounded-md ${
                   viewMode === "list" ? "bg-background shadow-sm" : ""
@@ -176,10 +239,9 @@ export default function ProductsPage() {
               >
                 <LayoutList className="h-4 w-4" />
               </button>
-            </div>
+            </motion.div>
           </div>
 
-          {/* Mobile Filter Button */}
           <Button
             variant="outline"
             className="lg:hidden"
@@ -190,15 +252,17 @@ export default function ProductsPage() {
           </Button>
         </div>
 
-        {/* Results Count */}
         <p className="text-muted-foreground mb-6">
-          {productsLoading ? "ກຳລັງໂຫຼດ..." : `ພົບ ${filteredProducts.length} ສິນຄ້າ`}
+          {loading
+            ? "ກຳລັງໂຫຼດ..."
+            : `ພົບ ${total} ສິນຄ້າ${searchQuery.trim() ? ` ສຳລັບ «${searchQuery.trim()}»` : ""}`}
         </p>
 
-        {/* Products Grid */}
-        {productsLoading ? (
-          <div className="text-center py-16 text-muted-foreground">ກຳລັງໂຫຼດສິນຄ້າຈາກ API...</div>
-        ) : filteredProducts.length > 0 ? (
+        {loading ? (
+          <div className="text-center py-16 text-muted-foreground">
+            ກຳລັງໂຫຼດສິນຄ້າຈາກ API...
+          </div>
+        ) : sortedProducts.length > 0 ? (
           <div
             className={
               viewMode === "grid"
@@ -206,7 +270,7 @@ export default function ProductsPage() {
                 : "flex flex-col gap-4"
             }
           >
-            {filteredProducts.map((product) => (
+            {sortedProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
@@ -215,25 +279,19 @@ export default function ProductsPage() {
             <p className="text-muted-foreground text-lg">
               ບໍ່ພົບສິນຄ້າທີ່ຄົ້ນຫາ
             </p>
-            <Button
-              variant="link"
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedCategory("all");
-              }}
-            >
+            <Button variant="link" onClick={clearFilters}>
               ລ້າງການຄົ້ນຫາ
             </Button>
           </div>
         )}
       </div>
 
-      {/* Mobile Filter Drawer */}
       {isFilterOpen && (
         <>
           <div
             className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50"
             onClick={() => setIsFilterOpen(false)}
+            aria-hidden
           />
           <motion.div
             initial={{ y: "100%" }}
@@ -241,21 +299,21 @@ export default function ProductsPage() {
             exit={{ y: "100%" }}
             className="fixed bottom-0 left-0 right-0 bg-background rounded-t-2xl z-50 p-6 max-h-[80vh] overflow-auto"
           >
-            <div className="flex items-center justify-between mb-6">
+            <motion.div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold">ຕົວກອງ</h3>
-              <button onClick={() => setIsFilterOpen(false)}>
+              <button type="button" onClick={() => setIsFilterOpen(false)}>
                 <X className="h-6 w-6" />
               </button>
-            </div>
+            </motion.div>
 
             <div className="space-y-6">
-              {/* Categories */}
               <div>
                 <h4 className="font-medium mb-3">ໝວດໝູ່</h4>
                 <div className="flex flex-wrap gap-2">
                   {categoryFilters.map((cat) => (
                     <button
                       key={cat.id}
+                      type="button"
                       onClick={() => setSelectedCategory(cat.id)}
                       className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                         selectedCategory === cat.id
@@ -269,13 +327,13 @@ export default function ProductsPage() {
                 </div>
               </div>
 
-              {/* Sort */}
               <div>
                 <h4 className="font-medium mb-3">ຈັດລຽງ</h4>
-                <div className="flex flex-wrap gap-2">
+                <motion.div className="flex flex-wrap gap-2">
                   {sortOptions.map((opt) => (
                     <button
                       key={opt.id}
+                      type="button"
                       onClick={() => setSortBy(opt.id)}
                       className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                         sortBy === opt.id
@@ -286,19 +344,22 @@ export default function ProductsPage() {
                       {opt.nameLao}
                     </button>
                   ))}
-                </div>
+                </motion.div>
               </div>
 
               <Button
                 className="w-full"
-                onClick={() => setIsFilterOpen(false)}
+                onClick={() => {
+                  setIsFilterOpen(false);
+                  applySearchToUrl();
+                }}
               >
-                ສະແດງຜົນ ({filteredProducts.length} ສິນຄ້າ)
+                ສະແດງຜົນ ({total} ສິນຄ້າ)
               </Button>
             </div>
           </motion.div>
         </>
       )}
-    </div>
+    </motion.div>
   );
 }

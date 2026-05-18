@@ -18,6 +18,7 @@ import type {
   ApiShippingConfig,
   ApiShippingQuote,
   ApiProduct,
+  ApiProductListParams,
   ApiProductListResponse,
   ApiUpdateCategoryBody,
   ApiUpdateProductBody,
@@ -231,15 +232,34 @@ export async function apiMeAdmin(): Promise<ApiUser> {
   return data;
 }
 
-export async function apiListProducts(params?: {
-  limit?: number;
-  offset?: number;
-}): Promise<ApiProduct[]> {
+export interface ApiProductListResult {
+  items: ApiProduct[];
+  total: number;
+}
+
+/** GET /products — supports q, search, category_id, limit, offset */
+export async function apiListProducts(
+  params?: ApiProductListParams
+): Promise<ApiProductListResult> {
+  const query: Record<string, string | number> = {};
+  if (params?.limit != null) query.limit = params.limit;
+  if (params?.offset != null) query.offset = params.offset;
+  if (params?.category_id != null) query.category_id = params.category_id;
+
+  const searchText = (params?.q ?? params?.search ?? "").trim();
+  if (searchText) query.q = searchText;
+
   const { data } = await publicClient.get<
     ApiProductListResponse | ApiProduct[]
-  >("/products", { params });
-  if (Array.isArray(data)) return data;
-  return data.items ?? [];
+  >("/products", { params: query });
+
+  if (Array.isArray(data)) {
+    return { items: data, total: data.length };
+  }
+  const items = data.items ?? [];
+  const total =
+    typeof data.total === "number" ? data.total : items.length;
+  return { items, total };
 }
 
 export async function apiGetProduct(id: number | string): Promise<ApiProduct> {
