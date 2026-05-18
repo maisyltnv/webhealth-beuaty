@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -18,12 +19,14 @@ import {
 /** ຊ່ວຍເວລາ — ສະແດງເມນູ «ລູກຄ້າ» / ເຂົ້າລະບົບ */
 const SHOW_CUSTOMER_LOGIN = false;
 import { OrderLookupDrawer } from "@/components/orders/order-lookup-drawer";
+import { ProductImage } from "@/components/products/product-image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useStore } from "@/lib/store";
 import { formatLAK } from "@/lib/format";
 
 export function Header() {
+  const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
@@ -31,6 +34,21 @@ export function Header() {
 
   const { cart, cartTotal, cartCount, removeFromCart, updateQuantity, categories } =
     useStore();
+
+  const submitSearch = (query: string) => {
+    const q = query.trim();
+    if (q) {
+      router.push(`/products?q=${encodeURIComponent(q)}`);
+    } else {
+      router.push("/products");
+    }
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitSearch(searchQuery);
+    setIsMenuOpen(false);
+  };
 
   return (
     <>
@@ -87,9 +105,12 @@ export function Header() {
             </nav>
 
             {/* Search Bar */}
-            <div className="hidden md:flex flex-1 max-w-md mx-6">
+            <form
+              onSubmit={handleSearchSubmit}
+              className="hidden md:flex flex-1 max-w-md mx-6"
+            >
               <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
                   type="search"
                   placeholder="ຄົ້ນຫາສິນຄ້າ..."
@@ -98,7 +119,7 @@ export function Header() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-            </div>
+            </form>
 
             {/* Right Actions */}
             <div className="flex items-center gap-1 sm:gap-2">
@@ -172,14 +193,16 @@ export function Header() {
               </div>
 
               <div className="p-4">
-                <div className="relative mb-4">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <form onSubmit={handleSearchSubmit} className="relative mb-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                   <Input
                     type="search"
                     placeholder="ຄົ້ນຫາສິນຄ້າ..."
                     className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                </div>
+                </form>
 
                 <nav className="space-y-2">
                   {categories.map((category) => {
@@ -275,11 +298,10 @@ export function Header() {
                         key={item.product.id}
                         className="flex gap-4 p-3 bg-muted rounded-lg"
                       >
-                        <img
+                        <ProductImage
                           src={item.product.images[0]}
                           alt={item.product.nameLao}
-                          className="w-20 h-20 object-cover rounded-md"
-                          crossOrigin="anonymous"
+                          className="w-20 h-20 object-cover rounded-md shrink-0"
                         />
                         <div className="flex-1">
                           <h4 className="font-medium text-sm">

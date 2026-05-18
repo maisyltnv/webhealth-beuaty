@@ -39,6 +39,8 @@ export default function ProductsPage() {
   useEffect(() => {
     const cat = searchParams.get("category");
     if (cat) setSelectedCategory(cat);
+    const q = searchParams.get("q");
+    setSearchQuery(q ?? "");
   }, [searchParams]);
 
   const filteredProducts = useMemo(() => {
