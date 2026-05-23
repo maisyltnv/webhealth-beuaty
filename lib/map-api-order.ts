@@ -16,6 +16,14 @@ function paymentLabel(method?: string): string {
   return method ?? "—";
 }
 
+function readPaymentReceiptUrl(o: ApiOrder): string | null {
+  const direct = o.payment_receipt_url;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const alt = (o as Record<string, unknown>).payment_receipt;
+  if (typeof alt === "string" && alt.trim()) return alt.trim();
+  return null;
+}
+
 function stubProduct(item: ApiOrderItem, productId: string): Product {
   const unitPrice = Number(item.unit_price_lak ?? 0);
   const qty = Number(item.quantity ?? 1);
@@ -86,6 +94,7 @@ export function apiOrderToStoreOrder(o: ApiOrder): Order {
     paymentMethod: paymentLabel(
       typeof o.payment_method === "string" ? o.payment_method : undefined
     ),
+    paymentReceiptUrl: readPaymentReceiptUrl(o),
     status: mapApiStatus(typeof o.status === "string" ? o.status : undefined),
     subtotalLAK: subtotal > 0 ? subtotal : undefined,
     shippingFeeLAK: shipping >= 0 ? shipping : undefined,

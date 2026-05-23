@@ -22,10 +22,12 @@ import { formatLAK, formatDateLao } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import {
   apiAdminListOrders,
+  apiGetOrder,
   apiUpdateOrderStatus,
   isApiConfigured,
 } from "@/lib/api";
 import { apiOrderToStoreOrder } from "@/lib/map-api-order";
+import { PaymentReceiptPreview } from "@/components/orders/payment-receipt-preview";
 
 const statusOptions = [
   { id: "all", label: "ທັງໝົດ" },
@@ -87,6 +89,7 @@ export default function AdminOrdersPage() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const loadOrders = useCallback(async () => {
     if (!isApiConfigured()) {
@@ -120,6 +123,40 @@ export default function AdminOrdersPage() {
     if (!isReady || !adminToken) return;
     void loadOrders();
   }, [isReady, adminToken, loadOrders]);
+
+  useEffect(() => {
+    if (!selectedOrder || !adminToken || !isApiConfigured()) return;
+    const apiId = resolveOrderApiId(selectedOrder);
+    if (!apiId) return;
+
+    let cancelled = false;
+    setDetailLoading(true);
+    (async () => {
+      try {
+        const full = await apiGetOrder(apiId);
+        const mapped = apiOrderToStoreOrder(full);
+        if (cancelled) return;
+        setSelectedOrder((prev) =>
+          prev?.id === selectedOrder.id
+            ? { ...prev, ...mapped, id: prev.id }
+            : prev
+        );
+        setLocalOrders((prev) =>
+          prev.map((o) =>
+            o.id === selectedOrder.id ? { ...o, ...mapped, id: o.id } : o
+          )
+        );
+      } catch {
+        /* keep list row data */
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOrder?.id, adminToken]);
 
   const filteredOrders = orders.filter((order) => {
     const q = searchQuery.toLowerCase();
@@ -481,6 +518,19 @@ export default function AdminOrdersPage() {
                 ) : (
                   <p className="text-sm text-muted-foreground">ບໍ່ມີລາຍການສິນຄ້າ</p>
                 )}
+              </div>
+
+              <div className="relative">
+                {detailLoading && (
+                  <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    ກຳລັງໂຫຼດຫຼັກຖານການຊຳລະ...
+                  </p>
+                )}
+                <PaymentReceiptPreview
+                  receiptUrl={selectedOrder.paymentReceiptUrl}
+                  paymentMethod={selectedOrder.paymentMethod}
+                />
               </div>
 
               <div className="bg-muted/50 rounded-xl p-4 space-y-2 text-sm">

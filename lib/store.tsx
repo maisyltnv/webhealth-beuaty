@@ -56,6 +56,8 @@ export interface Order {
     province: string;
   };
   paymentMethod: string;
+  /** URL ຮູບຫຼັກຖານການຊຳລະ (ຈາກ API payment_receipt_url) */
+  paymentReceiptUrl?: string | null;
   status: "pending" | "processing" | "shipped" | "delivered";
   subtotalLAK?: number;
   shippingFeeLAK?: number;
