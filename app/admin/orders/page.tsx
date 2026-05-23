@@ -23,9 +23,11 @@ import { useAuth } from "@/lib/auth";
 import {
   apiAdminListOrders,
   apiGetOrder,
+  apiGetOrderSourceLinks,
   apiUpdateOrderStatus,
   isApiConfigured,
 } from "@/lib/api";
+import type { ApiOrderSourceLink } from "@/lib/api-types";
 import { apiOrderToStoreOrder } from "@/lib/map-api-order";
 import { PaymentReceiptPreview } from "@/components/orders/payment-receipt-preview";
 
@@ -90,6 +92,11 @@ export default function AdminOrdersPage() {
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [sourceLinksLoading, setSourceLinksLoading] = useState(false);
+  const [sourceLinksError, setSourceLinksError] = useState<string | null>(null);
+  const [procurementLinks, setProcurementLinks] = useState<ApiOrderSourceLink[]>(
+    []
+  );
 
   const loadOrders = useCallback(async () => {
     if (!isApiConfigured()) {
@@ -131,11 +138,16 @@ export default function AdminOrdersPage() {
 
     let cancelled = false;
     setDetailLoading(true);
+    setSourceLinksError(null);
+    setProcurementLinks([]);
     (async () => {
       try {
-        const full = await apiGetOrder(apiId);
-        const mapped = apiOrderToStoreOrder(full);
+        const [full, sourceRes] = await Promise.all([
+          apiGetOrder(apiId),
+          apiGetOrderSourceLinks(apiId),
+        ]);
         if (cancelled) return;
+        const mapped = apiOrderToStoreOrder(full);
         setSelectedOrder((prev) =>
           prev?.id === selectedOrder.id
             ? { ...prev, ...mapped, id: prev.id }
@@ -146,6 +158,7 @@ export default function AdminOrdersPage() {
             o.id === selectedOrder.id ? { ...o, ...mapped, id: o.id } : o
           )
         );
+        setProcurementLinks(sourceRes.links ?? []);
       } catch {
         /* keep list row data */
       } finally {
@@ -157,6 +170,59 @@ export default function AdminOrdersPage() {
       cancelled = true;
     };
   }, [selectedOrder?.id, adminToken]);
+
+  const openProcurementLinks = useCallback(async () => {
+    if (!selectedOrder) return;
+    setSourceLinksError(null);
+
+    const fromState = procurementLinks
+      .map((l) => l.source_url?.trim())
+      .filter((u): u is string => Boolean(u));
+    if (fromState.length > 0) {
+      fromState.forEach((url) => window.open(url, "_blank", "noopener,noreferrer"));
+      return;
+    }
+
+    const fromItems = selectedOrder.items
+      .map((i) => i.product.sourceUrl?.trim())
+      .filter((u): u is string => Boolean(u));
+    if (fromItems.length > 0) {
+      fromItems.forEach((url) => window.open(url, "_blank", "noopener,noreferrer"));
+      return;
+    }
+
+    const apiId = resolveOrderApiId(selectedOrder);
+    if (!apiId) {
+      setSourceLinksError("ບໍ່ພົບ order id ສຳລັບ API");
+      return;
+    }
+    if (!adminToken) {
+      setSourceLinksError("ຕ້ອງເຂົ້າ /admin/login");
+      return;
+    }
+
+    setSourceLinksLoading(true);
+    try {
+      const res = await apiGetOrderSourceLinks(apiId);
+      const urls = (res.links ?? [])
+        .map((l) => l.source_url?.trim())
+        .filter((u): u is string => Boolean(u));
+      setProcurementLinks(res.links ?? []);
+      if (urls.length === 0) {
+        setSourceLinksError(
+          "ບໍ່ມີລິ້ງສັ່ງຊື້ — ຕັ້ງ source_url ໃນສິນຄ້າກ່ອນ (ໜ້າຈັດການສິນຄ້າ)"
+        );
+        return;
+      }
+      urls.forEach((url) => window.open(url, "_blank", "noopener,noreferrer"));
+    } catch (err) {
+      setSourceLinksError(
+        `ໂຫຼດລິ້ງສັ່ງຊື້ບໍ່ສຳເລັດ: ${formatOrdersApiError(err)}`
+      );
+    } finally {
+      setSourceLinksLoading(false);
+    }
+  }, [selectedOrder, procurementLinks, adminToken]);
 
   const filteredOrders = orders.filter((order) => {
     const q = searchQuery.toLowerCase();
@@ -495,25 +561,50 @@ export default function AdminOrdersPage() {
                 <p className="text-sm font-medium mb-3">ສິນຄ້າທີ່ສັ່ງ</p>
                 {selectedOrder.items.length > 0 ? (
                   <div className="space-y-3">
-                    {selectedOrder.items.map((item, idx) => (
-                      <div
-                        key={`${item.product.id}-${idx}`}
-                        className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg"
-                      >
-                        <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                          <Package className="h-6 w-6 text-muted-foreground" />
+                    {selectedOrder.items.map((item, idx) => {
+                      const link =
+                        procurementLinks.find(
+                          (l) =>
+                            String(l.product_id) === item.product.id
+                        )?.source_url?.trim() ||
+                        item.product.sourceUrl?.trim() ||
+                        "";
+                      return (
+                        <div
+                          key={`${item.product.id}-${idx}`}
+                          className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg"
+                        >
+                          <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                            <Package className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">
+                              {item.product.nameLao}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              ID {item.product.id} · x{item.quantity} ·{" "}
+                              {formatLAK(item.product.priceLAK * item.quantity)}
+                            </p>
+                            {link ? (
+                              <a
+                                href={link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                ເປີດລິ້ງສັ່ງຊື້
+                              </a>
+                            ) : (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                ບໍ່ມີ source_url
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">
-                            {item.product.nameLao}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            ID {item.product.id} · x{item.quantity} ·{" "}
-                            {formatLAK(item.product.priceLAK * item.quantity)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">ບໍ່ມີລາຍການສິນຄ້າ</p>
@@ -559,6 +650,12 @@ export default function AdminOrdersPage() {
                 </div>
               </div>
 
+              {sourceLinksError && (
+                <p className="text-xs text-destructive rounded-lg bg-destructive/10 px-3 py-2">
+                  {sourceLinksError}
+                </p>
+              )}
+
               <div className="flex items-center gap-3 pb-6">
                 <Button
                   variant="outline"
@@ -569,18 +666,18 @@ export default function AdminOrdersPage() {
                 </Button>
                 <Button
                   className="flex-1"
-                  onClick={() => {
-                    selectedOrder.items.forEach((item) => {
-                      if (item.product.sourceUrl) {
-                        window.open(item.product.sourceUrl, "_blank");
-                      }
-                    });
-                  }}
+                  onClick={() => void openProcurementLinks()}
                   disabled={
-                    !selectedOrder.items.some((i) => i.product.sourceUrl)
+                    sourceLinksLoading ||
+                    detailLoading ||
+                    selectedOrder.items.length === 0
                   }
                 >
-                  <ExternalLink className="h-4 w-4 mr-2" />
+                  {sourceLinksLoading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                  )}
                   ໄປສັ່ງຊື້
                 </Button>
               </div>

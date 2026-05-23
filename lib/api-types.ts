@@ -177,7 +177,23 @@ export interface ApiOrderItem {
   unit_price_lak?: number;
   line_total_lak?: number;
   product_name?: string;
+  product?: Pick<ApiProduct, "id" | "source_url" | "name">;
   [key: string]: unknown;
+}
+
+/** GET /orders/:id/source-links — admin procurement links */
+export interface ApiOrderSourceLink {
+  order_item_id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  source_url: string;
+}
+
+export interface ApiOrderSourceLinksResponse {
+  order_id: number;
+  order_number: string;
+  links: ApiOrderSourceLink[];
 }
 
 export interface ApiOrder {

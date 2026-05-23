@@ -16,6 +16,7 @@ import type {
   ApiUpdateExchangeRateResponse,
   ApiOrder,
   ApiOrderListResponse,
+  ApiOrderSourceLinksResponse,
   ApiOrdersByPhoneResponse,
   ApiOrderStatus,
   ApiUpdateOrderStatusBody,
@@ -419,6 +420,16 @@ export async function apiLookupOrdersByPhone(
 /** Bearer JWT (admin or customer) — GET /orders/:id */
 export async function apiGetOrder(id: number | string): Promise<ApiOrder> {
   const { data } = await ordersClient.get<ApiOrder>(`/orders/${id}`);
+  return data;
+}
+
+/** Admin JWT — GET /orders/:id/source-links (supplier URLs per line) */
+export async function apiGetOrderSourceLinks(
+  id: number | string
+): Promise<ApiOrderSourceLinksResponse> {
+  const { data } = await adminClient.get<ApiOrderSourceLinksResponse>(
+    `/orders/${id}/source-links`
+  );
   return data;
 }
 

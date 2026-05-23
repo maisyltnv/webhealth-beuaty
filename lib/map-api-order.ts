@@ -24,16 +24,25 @@ function readPaymentReceiptUrl(o: ApiOrder): string | null {
   return null;
 }
 
+function readItemSourceUrl(item: ApiOrderItem): string {
+  const nested = item.product?.source_url;
+  if (typeof nested === "string" && nested.trim()) return nested.trim();
+  const flat = (item as Record<string, unknown>).source_url;
+  if (typeof flat === "string" && flat.trim()) return flat.trim();
+  return "";
+}
+
 function stubProduct(item: ApiOrderItem, productId: string): Product {
   const unitPrice = Number(item.unit_price_lak ?? 0);
   const qty = Number(item.quantity ?? 1);
   const lineTotal = Number(item.line_total_lak ?? unitPrice * qty);
   const priceLAK =
     unitPrice > 0 ? unitPrice : qty > 0 ? lineTotal / qty : lineTotal;
+  const sourceUrl = readItemSourceUrl(item);
 
   return {
     id: productId,
-    name: item.product_name ?? `Product ${productId}`,
+    name: item.product?.name ?? item.product_name ?? `Product ${productId}`,
     nameLao: item.product_name ?? `ສິນຄ້າ #${productId}`,
     description: "",
     descriptionLao: "",
@@ -46,7 +55,7 @@ function stubProduct(item: ApiOrderItem, productId: string): Product {
     category: "",
     categoryLao: "",
     stock: 0,
-    sourceUrl: "",
+    sourceUrl,
     trustBadges: [],
     isNew: false,
     isBestSeller: false,
